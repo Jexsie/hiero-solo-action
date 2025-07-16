@@ -48,6 +48,12 @@ jobs:
       - name: 🚀 Checkout Repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install repo dependencies
+        run: npm install
+
+      - name: Build the action
+        run: npm run build
+
       - name: ⚙️ Setup Hiero Solo
         id: solo
         uses: ./
@@ -200,6 +206,12 @@ jobs:
       - name: 🚀 Checkout Repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Install repo dependencies
+        run: npm install
+
+      - name: Build the action
+        run: npm run build
+
       - name: ⚙️ Setup Hiero Solo with MirrorNode
         id: solo
         uses: ./
@@ -273,6 +285,12 @@ jobs:
 
       - name: 🚀 Checkout Repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install repo dependencies
+        run: npm install
+
+      - name: Build the action
+        run: npm run build
 
       - name: ⚙️ Setup Hiero Solo with JSON-RPC Relay
         id: solo
