@@ -11,6 +11,9 @@ jobs:
   validate-outputs:
     runs-on: ubuntu-latest
     steps:
+      - name: 🚀 Checkout Repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Setup system dependencies
         uses: ./.github/actions/setup-env
 
@@ -86,6 +89,9 @@ jobs:
   validate-mirror-node:
     runs-on: ubuntu-latest
     steps:
+      - name: 🚀 Checkout Repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Setup system dependencies
         uses: ./.github/actions/setup-env
 
@@ -126,6 +132,9 @@ jobs:
   validate-json-rpc-relay:
     runs-on: ubuntu-latest
     steps:
+      - name: 🚀 Checkout Repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
       - name: Setup system dependencies
         uses: ./.github/actions/setup-env
 
