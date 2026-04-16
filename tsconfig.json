@@ -5,6 +5,8 @@
     "lib": ["ESNext", "DOM"],
     "allowJs": true,
     "checkJs": true,
+    "noEmit": true,
+    "strict": true,
     "outDir": "dist",
     "noImplicitAny": true,
     "noUnusedLocals": true,
