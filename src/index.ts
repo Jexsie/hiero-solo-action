@@ -4,7 +4,6 @@ import {
   setFailed,
   saveState,
   getInput,
-  info,
   startGroup,
   addPath,
   endGroup,
@@ -31,22 +30,24 @@ async function setupDependencies() {
 
   try {
     // 1. Install WGet & Python (Standard OS packages)
-    info("Updating apt and installing Wget/Python...");
+    safeInfo(
+      "Updating apt and installing Wget, Python, Java 21, Kind, and Kubectl",
+    );
     await exec("sudo apt-get update");
     await exec("sudo apt-get install -y wget python3.10");
 
     // 2. Setup Java 21 (Temurin)
     const javaPath = await which("java", false);
     if (!javaPath) {
-      info("Installing OpenJDK 21...");
+      safeInfo("Installing OpenJDK 21...");
       await exec("sudo apt-get install -y openjdk-21-jdk");
     }
 
-    // 3. Setup Kind (v0.26.0)
-    const kindVersion = "v0.26.0";
+    // Setups Kind
+    const kindVersion = "v0.29.0";
     const kindPath = await which("kind", false);
     if (!kindPath) {
-      info(`Downloading Kind ${kindVersion}...`);
+      safeInfo(`Downloading Kind ${kindVersion}...`);
       const kindUrl = `https://kind.sigs.k8s.io/dl/${kindVersion}/kind-linux-amd64`;
       const downloadedKind = await downloadTool(kindUrl);
       await exec("chmod", ["+x", downloadedKind]);
@@ -59,8 +60,8 @@ async function setupDependencies() {
       addPath(cachedKind);
     }
 
-    // 4. Setup Kubectl (v1.31.4 - required by Kind)
-    const k8sVersion = "v1.31.4";
+    // Setups Kubectl (required by Kind)
+    const k8sVersion = "v1.32.2";
     const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
     const downloadedKubectl = await downloadTool(kubectlUrl);
     await exec("chmod", ["+x", downloadedKubectl]);
@@ -72,14 +73,14 @@ async function setupDependencies() {
     );
     addPath(cachedKubectl);
 
-    // 5. Install Solo CLI (via NPM)
+    // Installs Solo CLI
     const soloVersion = getInput("soloVersion") || "latest";
-    info(`Installing Solo CLI version: ${soloVersion}`);
+    safeInfo(`Installing Solo CLI version: ${soloVersion}`);
     // We use --unsafe-perm if running as root in some containers,
     // but usually standard global install works on GH runners.
     await exec("sudo npm install -g @hashgraph/solo@" + soloVersion);
 
-    info("✅ All dependencies installed successfully.");
+    safeInfo("✅ All dependencies installed successfully.");
   } catch (error) {
     throw new Error(
       `Dependency setup failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -100,7 +101,7 @@ async function createKindCluster(clusterName: string): Promise<void> {
  * Initializes Solo CLI configuration
  */
 async function initializeSolo(): Promise<void> {
-  await safeExec("solo", ["init"]);
+  await safeExec("solo", ["init", "--dev"]);
 }
 
 /**
