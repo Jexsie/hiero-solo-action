@@ -30,6 +30,8 @@
   "dependencies": {
     "@actions/core": "^1.11.1",
     "@actions/exec": "^1.1.1",
+    "@actions/io": "^3.0.2",
+    "@actions/tool-cache": "^4.0.0",
     "@vercel/ncc": "^0.38.3",
     "child_process": "^1.0.2",
     "fs": "^0.0.1-security"

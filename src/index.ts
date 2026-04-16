@@ -1,7 +1,18 @@
 import { readFileSync } from "fs";
 import { spawn } from "child_process";
 import { exec } from "@actions/exec";
-import { setFailed, saveState, getInput, setOutput, info } from "@actions/core";
+import { which } from "@actions/io";
+import {
+  setFailed,
+  saveState,
+  getInput,
+  setOutput,
+  info,
+  startGroup,
+  addPath,
+  endGroup,
+} from "@actions/core";
+import { downloadTool, cacheFile } from "@actions/tool-cache";
 
 interface AccountInfo {
   accountId: string;
@@ -73,7 +84,7 @@ function safeInfo(message: string): void {
 async function safeExec(
   command: string,
   args?: string[],
-  options?: Parameters<typeof exec>[2]
+  options?: Parameters<typeof exec>[2],
 ): Promise<number> {
   try {
     const result = await exec(command, args, options);
@@ -81,7 +92,7 @@ async function safeExec(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`
+      `Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`,
     );
   }
 }
@@ -96,7 +107,7 @@ async function safeExec(
 async function portForwardIfExists(
   service: string,
   portSpec: string,
-  namespace: string
+  namespace: string,
 ): Promise<void> {
   try {
     // Check if service exists first
@@ -117,7 +128,7 @@ async function portForwardIfExists(
         {
           detached: true,
           stdio: "ignore",
-        }
+        },
       );
 
       // Handle process errors
@@ -131,9 +142,43 @@ async function portForwardIfExists(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     safeInfo(
-      `Service ${service} not found or error occurred: ${errorMessage}, skipping port-forward`
+      `Service ${service} not found or error occurred: ${errorMessage}, skipping port-forward`,
     );
   }
+}
+
+async function setupDependencies() {
+  startGroup("Installing System Dependencies");
+
+  // 1. Ensure 'kind' is installed
+  const kindPath = await which("kind", false);
+  if (!kindPath) {
+    info("Kind not found. Installing...");
+    const kindVersion = "v0.20.0";
+    const downloadUrl = `https://kind.sigs.k8s.io/dl/${kindVersion}/kind-linux-amd64`;
+    const downloaded = await downloadTool(downloadUrl);
+    await exec("chmod", ["+x", downloaded]);
+    const cachedPath = await cacheFile(downloaded, "kind", "kind", kindVersion);
+    addPath(cachedPath);
+  }
+
+  // 2. Ensure Java is installed (e.g., for Hiero/Solo requirements)
+  const javaPath = await which("java", false);
+  if (!javaPath) {
+    info("Java not found. Installing Temurin JDK 17...");
+    // You can download a JDK archive directly or use a shell fallback
+    // For simplicity, calling apt-get on Linux runners is often the fastest JS fallback:
+    await exec("sudo apt-get update");
+    await exec("sudo apt-get install -y openjdk-17-jdk");
+  }
+
+  // 3. Ensure 'wget' is installed (usually present on Ubuntu runners)
+  const wgetPath = await which("wget", false);
+  if (!wgetPath) {
+    await exec("sudo apt-get install -y wget");
+  }
+
+  endGroup();
 }
 
 /**
@@ -169,7 +214,7 @@ async function connectSoloToCluster(clusterName: string): Promise<void> {
  */
 async function createSoloDeployment(
   namespace: string,
-  deployment: string
+  deployment: string,
 ): Promise<void> {
   await safeExec("solo", [
     "deployment",
@@ -186,7 +231,7 @@ async function createSoloDeployment(
  */
 async function addClusterToDeployment(
   deployment: string,
-  clusterName: string
+  clusterName: string,
 ): Promise<void> {
   await safeExec("solo", [
     "deployment",
@@ -242,7 +287,7 @@ async function deployNetwork(deployment: string): Promise<void> {
  */
 async function setupNode(
   deployment: string,
-  hieroVersion: string
+  hieroVersion: string,
 ): Promise<void> {
   await safeExec("solo", [
     "node",
@@ -391,7 +436,7 @@ async function deployRelay(): Promise<void> {
     await portForwardIfExists(
       "relay-node1-hedera-json-rpc-relay",
       `${relayPort}:7546`,
-      namespace
+      namespace,
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -438,7 +483,7 @@ async function createAccount(type: "ecdsa" | "ed25519"): Promise<void> {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         throw new Error(
-          `Failed to read or parse account file: ${errorMessage}`
+          `Failed to read or parse account file: ${errorMessage}`,
         );
       }
     };
@@ -517,6 +562,7 @@ function safeSetFailed(message: string): void {
  */
 async function run(): Promise<void> {
   try {
+    await setupDependencies();
     await deploySoloTestNetwork();
     await deployMirrorNode();
     await deployRelay();
