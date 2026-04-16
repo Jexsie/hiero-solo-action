@@ -61590,32 +61590,49 @@ async function portForwardIfExists(service, portSpec, namespace) {
 }
 async function setupDependencies() {
     (0,lib_core.startGroup)("Installing System Dependencies");
-    // 1. Ensure 'kind' is installed
-    const kindPath = await which("kind", false);
-    if (!kindPath) {
-        (0,lib_core.info)("Kind not found. Installing...");
-        const kindVersion = "v0.20.0";
-        const downloadUrl = `https://kind.sigs.k8s.io/dl/${kindVersion}/kind-linux-amd64`;
-        const downloaded = await downloadTool(downloadUrl);
-        await (0,lib_exec.exec)("chmod", ["+x", downloaded]);
-        const cachedPath = await cacheFile(downloaded, "kind", "kind", kindVersion);
-        (0,lib_core.addPath)(cachedPath);
-    }
-    // 2. Ensure Java is installed (e.g., for Hiero/Solo requirements)
-    const javaPath = await which("java", false);
-    if (!javaPath) {
-        (0,lib_core.info)("Java not found. Installing Temurin JDK 17...");
-        // You can download a JDK archive directly or use a shell fallback
-        // For simplicity, calling apt-get on Linux runners is often the fastest JS fallback:
+    try {
+        // 1. Install WGet & Python (Standard OS packages)
+        (0,lib_core.info)("Updating apt and installing Wget/Python...");
         await (0,lib_exec.exec)("sudo apt-get update");
-        await (0,lib_exec.exec)("sudo apt-get install -y openjdk-17-jdk");
+        await (0,lib_exec.exec)("sudo apt-get install -y wget python3.10");
+        // 2. Setup Java 21 (Temurin)
+        const javaPath = await which("java", false);
+        if (!javaPath) {
+            (0,lib_core.info)("Installing OpenJDK 21...");
+            await (0,lib_exec.exec)("sudo apt-get install -y openjdk-21-jdk");
+        }
+        // 3. Setup Kind (v0.26.0)
+        const kindVersion = "v0.26.0";
+        const kindPath = await which("kind", false);
+        if (!kindPath) {
+            (0,lib_core.info)(`Downloading Kind ${kindVersion}...`);
+            const kindUrl = `https://kind.sigs.k8s.io/dl/${kindVersion}/kind-linux-amd64`;
+            const downloadedKind = await downloadTool(kindUrl);
+            await (0,lib_exec.exec)("chmod", ["+x", downloadedKind]);
+            const cachedKind = await cacheFile(downloadedKind, "kind", "kind", kindVersion);
+            (0,lib_core.addPath)(cachedKind);
+        }
+        // 4. Setup Kubectl (v1.31.4 - required by Kind)
+        const k8sVersion = "v1.31.4";
+        const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
+        const downloadedKubectl = await downloadTool(kubectlUrl);
+        await (0,lib_exec.exec)("chmod", ["+x", downloadedKubectl]);
+        const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", k8sVersion);
+        (0,lib_core.addPath)(cachedKubectl);
+        // 5. Install Solo CLI (via NPM)
+        const soloVersion = (0,lib_core.getInput)("soloVersion") || "latest";
+        (0,lib_core.info)(`Installing Solo CLI version: ${soloVersion}`);
+        // We use --unsafe-perm if running as root in some containers,
+        // but usually standard global install works on GH runners.
+        await (0,lib_exec.exec)("sudo npm install -g @hashgraph/solo@" + soloVersion);
+        (0,lib_core.info)("✅ All dependencies installed successfully.");
     }
-    // 3. Ensure 'wget' is installed (usually present on Ubuntu runners)
-    const wgetPath = await which("wget", false);
-    if (!wgetPath) {
-        await (0,lib_exec.exec)("sudo apt-get install -y wget");
+    catch (error) {
+        throw new Error(`Dependency setup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-    (0,lib_core.endGroup)();
+    finally {
+        (0,lib_core.endGroup)();
+    }
 }
 /**
  * Creates a Kubernetes cluster using kind
