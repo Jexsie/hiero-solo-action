@@ -14,6 +14,12 @@ importers:
       '@actions/exec':
         specifier: ^1.1.1
         version: 1.1.1
+      '@actions/io':
+        specifier: ^3.0.2
+        version: 3.0.2
+      '@actions/tool-cache':
+        specifier: ^4.0.0
+        version: 4.0.0
       '@vercel/ncc':
         specifier: ^0.38.3
         version: 0.38.4
@@ -39,14 +45,29 @@ packages:
   '@actions/core@1.11.1':
     resolution: {integrity: sha512-hXJCSrkwfA46Vd9Z3q4cpEpHB1rL5NG04+/rbqW9d3+CSvtB1tYe8UTpAlixa1vj0m/ULglfEK2UKxMGxCxv5A==}
 
+  '@actions/core@3.0.0':
+    resolution: {integrity: sha512-zYt6cz+ivnTmiT/ksRVriMBOiuoUpDCJJlZ5KPl2/FRdvwU3f7MPh9qftvbkXJThragzUZieit2nyHUyw53Seg==}
+
   '@actions/exec@1.1.1':
     resolution: {integrity: sha512-+sCcHHbVdk93a0XT19ECtO/gIXoxvdsgQLzb2fE2/5sIZmWQuluYyjPQtrtTHdU1YzTZ7bAPN4sITq2xi1679w==}
+
+  '@actions/exec@3.0.0':
+    resolution: {integrity: sha512-6xH/puSoNBXb72VPlZVm7vQ+svQpFyA96qdDBvhB8eNZOE8LtPf9L4oAsfzK/crCL8YZ+19fKYVnM63Sl+Xzlw==}
 
   '@actions/http-client@2.2.3':
     resolution: {integrity: sha512-mx8hyJi/hjFvbPokCg4uRd4ZX78t+YyRPtnKWwIl+RzNaVuFpQHfmlGVfsKEJN8LwTCvL+DfVgAM04XaHkm6bA==}
 
+  '@actions/http-client@4.0.0':
+    resolution: {integrity: sha512-QuwPsgVMsD6qaPD57GLZi9sqzAZCtiJT8kVBCDpLtxhL5MydQ4gS+DrejtZZPdIYyB1e95uCK9Luyds7ybHI3g==}
+
   '@actions/io@1.1.3':
     resolution: {integrity: sha512-wi9JjgKLYS7U/z8PPbco+PvTb/nRWjeoFlJ1Qer83k/3C5PHQi28hiVdeE2kHXmIL99mQFawx8qt/JPjZilJ8Q==}
+
+  '@actions/io@3.0.2':
+    resolution: {integrity: sha512-nRBchcMM+QK1pdjO7/idu86rbJI5YHUKCvKs0KxnSYbVe3F51UfGxuZX4Qy/fWlp6l7gWFwIkrOzN+oUK03kfw==}
+
+  '@actions/tool-cache@4.0.0':
+    resolution: {integrity: sha512-L8P9HbXvpvqjZDveb/fdsa55IVC0trfPgQ4ZwGo6r5af6YDVdM9vMGPZ7rgY2fAT9gGj4PSYd6bYlg3p3jD78A==}
 
   '@fastify/busboy@2.1.1':
     resolution: {integrity: sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==}
@@ -70,6 +91,11 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  semver@7.7.4:
+    resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   tunnel@0.0.6:
     resolution: {integrity: sha512-1h/Lnq9yajKY2PEbBadPXj3VxsDDu844OnaAo52UVmIzIvwwtBPIuNvkjuzBlTWpfJyUbG3ez0KSBibQkj4ojg==}
     engines: {node: '>=0.6.11 <=0.7.0 || >=0.7.3'}
@@ -86,6 +112,10 @@ packages:
     resolution: {integrity: sha512-raqeBD6NQK4SkWhQzeYKd1KmIG6dllBOTt55Rmkt4HtI9mwdWtJljnrXjAFUBLTSN67HWrOIZ3EPF4kjUw80Bg==}
     engines: {node: '>=14.0'}
 
+  undici@6.25.0:
+    resolution: {integrity: sha512-ZgpWDC5gmNiuY9CnLVXEH8rl50xhRCuLNA97fAUnKi8RRuV4E6KG31pDTsLVUKnohJE0I3XDrTeEydAXRw47xg==}
+    engines: {node: '>=18.17'}
+
 snapshots:
 
   '@actions/core@1.11.1':
@@ -93,16 +123,40 @@ snapshots:
       '@actions/exec': 1.1.1
       '@actions/http-client': 2.2.3
 
+  '@actions/core@3.0.0':
+    dependencies:
+      '@actions/exec': 3.0.0
+      '@actions/http-client': 4.0.0
+
   '@actions/exec@1.1.1':
     dependencies:
       '@actions/io': 1.1.3
+
+  '@actions/exec@3.0.0':
+    dependencies:
+      '@actions/io': 3.0.2
 
   '@actions/http-client@2.2.3':
     dependencies:
       tunnel: 0.0.6
       undici: 5.29.0
 
+  '@actions/http-client@4.0.0':
+    dependencies:
+      tunnel: 0.0.6
+      undici: 6.25.0
+
   '@actions/io@1.1.3': {}
+
+  '@actions/io@3.0.2': {}
+
+  '@actions/tool-cache@4.0.0':
+    dependencies:
+      '@actions/core': 3.0.0
+      '@actions/exec': 3.0.0
+      '@actions/http-client': 4.0.0
+      '@actions/io': 3.0.2
+      semver: 7.7.4
 
   '@fastify/busboy@2.1.1': {}
 
@@ -118,6 +172,8 @@ snapshots:
 
   husky@9.1.7: {}
 
+  semver@7.7.4: {}
+
   tunnel@0.0.6: {}
 
   typescript@5.9.3: {}
@@ -127,3 +183,5 @@ snapshots:
   undici@5.29.0:
     dependencies:
       '@fastify/busboy': 2.1.1
+
+  undici@6.25.0: {}
