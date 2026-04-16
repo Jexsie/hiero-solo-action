@@ -57724,16 +57724,14 @@ module.exports = parseParams
 /************************************************************************/
 var __webpack_exports__ = {};
 
-// EXTERNAL MODULE: external "fs"
-var external_fs_ = __nccwpck_require__(9896);
-// EXTERNAL MODULE: external "child_process"
-var external_child_process_ = __nccwpck_require__(5317);
 // EXTERNAL MODULE: ./node_modules/.pnpm/@actions+exec@1.1.1/node_modules/@actions/exec/lib/exec.js
 var lib_exec = __nccwpck_require__(2851);
 // EXTERNAL MODULE: external "assert"
 var external_assert_ = __nccwpck_require__(2613);
 // EXTERNAL MODULE: external "path"
 var external_path_ = __nccwpck_require__(6928);
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(9896);
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+io@3.0.2/node_modules/@actions/io/lib/io-util.js
 var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -59622,6 +59620,8 @@ function toPlatformPath(pth) {
 var external_string_decoder_ = __nccwpck_require__(3193);
 // EXTERNAL MODULE: external "events"
 var external_events_ = __nccwpck_require__(4434);
+// EXTERNAL MODULE: external "child_process"
+var external_child_process_ = __nccwpck_require__(5317);
 // EXTERNAL MODULE: external "timers"
 var external_timers_ = __nccwpck_require__(3557);
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+exec@3.0.0/node_modules/@actions/exec/lib/toolrunner.js
@@ -61475,9 +61475,7 @@ function _unique(values) {
     return Array.from(new Set(values));
 }
 //# sourceMappingURL=tool-cache.js.map
-;// CONCATENATED MODULE: ./src/index.ts
-
-
+;// CONCATENATED MODULE: ./src/utils.ts
 
 
 
@@ -61588,6 +61586,27 @@ async function portForwardIfExists(service, portSpec, namespace) {
         safeInfo(`Service ${service} not found or error occurred: ${errorMessage}, skipping port-forward`);
     }
 }
+/**
+ * Safely reads a file with proper error handling
+ * @param filePath - The path to the file to read
+ * @returns The file content as string
+ */
+function safeReadFileSync(filePath) {
+    try {
+        return (0,external_fs_.readFileSync)(filePath, "utf-8");
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`);
+    }
+}
+
+;// CONCATENATED MODULE: ./src/index.ts
+
+
+
+
+
 async function setupDependencies() {
     (0,lib_core.startGroup)("Installing System Dependencies");
     try {
@@ -61862,20 +61881,6 @@ async function deployRelay() {
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         safeInfo(`Relay service deployment failed: ${errorMessage}, continuing...`);
-    }
-}
-/**
- * Safely reads a file with proper error handling
- * @param filePath - The path to the file to read
- * @returns The file content as string
- */
-function safeReadFileSync(filePath) {
-    try {
-        return (0,external_fs_.readFileSync)(filePath, "utf-8");
-    }
-    catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`);
     }
 }
 /**
