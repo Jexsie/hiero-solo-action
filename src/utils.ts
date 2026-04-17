@@ -143,3 +143,17 @@ export function safeReadFileSync(filePath: string): string {
     throw new Error(`Failed to read file ${filePath}: ${errorMessage}`);
   }
 }
+
+/**
+ * Compares two semver-like version strings.
+ * Returns true if `version` >= `target`.
+ */
+export function isVersionGte(version: string, target: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+  const [aMajor = 0, aMinor = 0, aPatch = 0] = parse(version);
+  const [bMajor = 0, bMinor = 0, bPatch = 0] = parse(target);
+
+  if (aMajor !== bMajor) return aMajor > bMajor;
+  if (aMinor !== bMinor) return aMinor > bMinor;
+  return aPatch >= bPatch;
+}
