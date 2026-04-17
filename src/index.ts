@@ -1,4 +1,3 @@
-import { exec } from "@actions/exec";
 import { which } from "@actions/io";
 import {
   setFailed,
@@ -19,6 +18,7 @@ import {
   safeReadFileSync,
   portForwardIfExists,
   extractAccountAsJson,
+  isVersionGte,
 } from "./utils.js";
 
 interface AccountInfo {
@@ -28,33 +28,14 @@ interface AccountInfo {
 }
 
 /**
- * Compares two semver-like version strings.
- * Returns true if `version` >= `target`.
- */
-function isVersionGte(version: string, target: string): boolean {
-  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
-  const [aMajor = 0, aMinor = 0, aPatch = 0] = parse(version);
-  const [bMajor = 0, bMinor = 0, bPatch = 0] = parse(target);
-
-  if (aMajor !== bMajor) return aMajor > bMajor;
-  if (aMinor !== bMinor) return aMinor > bMinor;
-  return aPatch >= bPatch;
-}
-
-/**
  * Detects the installed Solo CLI version and whether it is >= 0.44.0.
- *
- * Handles multiple output formats:
- *  - oclif default:  "@hashgraph/solo/0.65.0 linux-x64 node-v22.x.x"
- *  - legacy banner:  "Version 0.65.0" or "Solo Version 0.65.0"
- *  - bare semver:    "0.65.0"
  */
 async function checkSoloVersion(): Promise<boolean> {
   try {
     let stdout = "";
     let stderr = "";
 
-    await exec("solo", ["--version"], {
+    await safeExec("solo", ["--version"], {
       listeners: {
         stdout: (data: Buffer) => {
           stdout += data.toString();
@@ -101,28 +82,28 @@ async function setupDependencies(): Promise<void> {
   startGroup("Installing System Dependencies");
 
   try {
-    // 1. Install wget & Python (Standard OS packages)
+    // Install wget & Python (Standard OS packages)
     safeInfo(
       "Updating apt and installing wget, Python, Java 21, Kind, and kubectl",
     );
-    await exec("sudo apt-get update");
-    await exec("sudo apt-get install -y wget python3.10");
+    await safeExec("sudo apt-get update");
+    await safeExec("sudo apt-get install -y wget python3.10");
 
-    // 2. Setup Java 21 (Temurin)
+    // Setup Java 21 (Temurin)
     const javaPath = await which("java", false);
     if (!javaPath) {
       safeInfo("Installing OpenJDK 21...");
-      await exec("sudo apt-get install -y openjdk-21-jdk");
+      await safeExec("sudo apt-get install -y openjdk-21-jdk");
     }
 
-    // 3. Setup Kind
+    // Setup Kind
     const kindVersion = "v0.29.0";
     const kindPath = await which("kind", false);
     if (!kindPath) {
       safeInfo(`Downloading Kind ${kindVersion}...`);
       const kindUrl = `https://kind.sigs.k8s.io/dl/${kindVersion}/kind-linux-amd64`;
       const downloadedKind = await downloadTool(kindUrl);
-      await exec("chmod", ["+x", downloadedKind]);
+      await safeExec("chmod", ["+x", downloadedKind]);
       const cachedKind = await cacheFile(
         downloadedKind,
         "kind",
@@ -132,11 +113,11 @@ async function setupDependencies(): Promise<void> {
       addPath(cachedKind);
     }
 
-    // 4. Setup kubectl
+    // Setup kubectl
     const k8sVersion = "v1.32.2";
     const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
     const downloadedKubectl = await downloadTool(kubectlUrl);
-    await exec("chmod", ["+x", downloadedKubectl]);
+    await safeExec("chmod", ["+x", downloadedKubectl]);
     const cachedKubectl = await cacheFile(
       downloadedKubectl,
       "kubectl",
@@ -145,10 +126,10 @@ async function setupDependencies(): Promise<void> {
     );
     addPath(cachedKubectl);
 
-    // 5. Install Solo CLI
+    // Install Solo CLI
     const soloVersion = getInput("soloVersion") || "latest";
     safeInfo(`Installing Solo CLI version: ${soloVersion}`);
-    await exec(`sudo npm install -g @hashgraph/solo@${soloVersion}`);
+    await safeExec(`sudo npm install -g @hashgraph/solo@${soloVersion}`);
 
     safeInfo("✅ All dependencies installed successfully.");
   } catch (error) {
@@ -462,7 +443,7 @@ async function setupHostsEntries(
 ): Promise<void> {
   try {
     // Check if we have sudo access
-    const sudoCheck = await exec("sudo", ["-n", "true"], {
+    const sudoCheck = await safeExec("sudo", ["-n", "true"], {
       ignoreReturnCode: true,
     });
 
