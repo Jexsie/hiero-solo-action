@@ -61625,26 +61625,63 @@ function isVersionGte(version, target) {
 }
 /**
  * Detects the installed Solo CLI version and whether it is >= 0.44.0.
+ *
+ * Handles multiple output formats:
+ *  - oclif default:  "@hashgraph/solo/0.65.0 linux-x64 node-v22.x.x"
+ *  - legacy banner:  "Version 0.65.0" or "Solo Version 0.65.0"
+ *  - bare semver:    "0.65.0"
  */
 async function checkSoloVersion() {
-    let versionOutput = "";
-    await safeExec("solo", ["--version"], {
-        listeners: {
-            stdout: (data) => {
-                versionOutput += data.toString();
+    try {
+        let stdout = "";
+        let stderr = "";
+        await (0,lib_exec.exec)("solo", ["--version"], {
+            listeners: {
+                stdout: (data) => {
+                    stdout += data.toString();
+                },
+                stderr: (data) => {
+                    stderr += data.toString();
+                },
             },
-        },
-    });
-    // Output format: "Version X.Y.Z" or similar
-    const match = versionOutput.match(/Version\s+(\S+)/i);
-    if (!match) {
-        safeInfo(`Could not parse Solo version from output: ${versionOutput}. Assuming >= 0.44.0.`);
+            ignoreReturnCode: true,
+            silent: true,
+        });
+        const combined = `${stdout}\n${stderr}`.trim();
+        safeInfo(`[checkSoloVersion] raw output: ${combined}`);
+        let version;
+        // Pattern 1: oclif format "@hashgraph/solo/X.Y.Z" or "solo/X.Y.Z"
+        const oclif = combined.match(/solo\/(\d+\.\d+\.\d+)/i);
+        if (oclif) {
+            version = oclif[1];
+        }
+        // Pattern 2: "Version X.Y.Z"
+        if (!version) {
+            const banner = combined.match(/Version\s+(\d+\.\d+\.\d+)/i);
+            if (banner) {
+                version = banner[1];
+            }
+        }
+        // Pattern 3: bare semver anywhere in the output
+        if (!version) {
+            const bare = combined.match(/(\d+\.\d+\.\d+)/);
+            if (bare) {
+                version = bare[1];
+            }
+        }
+        if (!version) {
+            safeInfo(`[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.`);
+            return true;
+        }
+        const ge0440 = isVersionGte(version, "0.44.0");
+        safeInfo(`[checkSoloVersion] version=${version}, >= 0.44.0: ${ge0440}`);
+        return ge0440;
+    }
+    catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        safeInfo(`[checkSoloVersion] Failed to detect version: ${msg}. Assuming >= 0.44.0.`);
         return true;
     }
-    const version = match[1];
-    const ge0440 = isVersionGte(version, "0.44.0");
-    safeInfo(`Solo version: ${version}, >= 0.44.0: ${ge0440}`);
-    return ge0440;
 }
 /**
  * Installs all system-level dependencies required by the action:
@@ -62005,7 +62042,7 @@ async function deploySoloTestNetwork(soloGe0440) {
     }
     const numNodes = dualMode ? 2 : 1;
     const nodeIds = dualMode ? "node1,node2" : "node1";
-    safeInfo(`Deploying ${numNodes} consensus node(s)...`);
+    safeInfo(`[deploySoloTestNetwork] soloGe0440=${soloGe0440}, dualMode=${dualMode}, nodes=${numNodes}, nodeIds=${nodeIds}, hieroVersion=${hieroVersion}`);
     try {
         (0,lib_core.saveState)("clusterName", clusterName);
     }
