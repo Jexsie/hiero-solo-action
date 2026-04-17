@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/hiero-ledger/hiero-solo-action#readme",
   "devDependencies": {
-    "@types/node": "^24.0.13",
+    "@types/node": "^24.1.0",
     "husky": "^9.1.7",
     "typescript": "^6.0.3"
   },
