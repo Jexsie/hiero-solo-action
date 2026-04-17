@@ -1,25 +1,16 @@
-import { which } from "@actions/io";
+import { setFailed, saveState } from "@actions/core";
+import { setupDependencies, checkSoloVersion } from "./setup.js";
 import {
-  setFailed,
-  saveState,
-  getInput,
-  startGroup,
-  addPath,
-  endGroup,
-} from "@actions/core";
-import { downloadTool, cacheFile, extractTar, cacheDir } from "@actions/tool-cache";
-import { existsSync, readdirSync } from "fs";
-import { join } from "path";
-import {
-  safeInfo,
   safeExec,
   safeGetInput,
   safeSetOutput,
   safeReadFileSync,
   portForwardIfExists,
   extractAccountAsJson,
-  isVersionGte,
+  safeInfo,
 } from "./utils.js";
+import { join } from "path";
+import { existsSync } from "fs";
 
 interface AccountInfo {
   accountId: string;
@@ -27,179 +18,8 @@ interface AccountInfo {
   balance: number;
 }
 
-/**
- * Detects the installed Solo CLI version and whether it is >= 0.44.0.
- */
-async function checkSoloVersion(): Promise<boolean> {
-  try {
-    let stdout = "";
-    let stderr = "";
-
-    await safeExec("solo", ["--version"], {
-      listeners: {
-        stdout: (data: Buffer) => {
-          stdout += data.toString();
-        },
-        stderr: (data: Buffer) => {
-          stderr += data.toString();
-        },
-      },
-      ignoreReturnCode: true,
-      silent: true,
-    });
-
-    const combined = `${stdout}\n${stderr}`.trim();
-    safeInfo(`[checkSoloVersion] raw output: ${combined}`);
-
-    // Match "Version<whitespace>:<whitespace>X.Y.Z" from the Solo banner
-    const match = combined.match(/Version\s*:\s*(\d+\.\d+\.\d+)/);
-
-    if (!match) {
-      safeInfo(
-        `[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.`,
-      );
-      return true;
-    }
-
-    const version = match[1];
-    const ge0440 = isVersionGte(version, "0.44.0");
-    safeInfo(`[checkSoloVersion] version=${version}, >= 0.44.0: ${ge0440}`);
-    return ge0440;
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    safeInfo(
-      `[checkSoloVersion] Failed to detect version: ${msg}. Assuming >= 0.44.0.`,
-    );
-    return true;
-  }
-}
-
-/**
- * Installs all system-level dependencies required by the action:
- * wget, python, Java 21, Kind, kubectl, and Solo CLI.
- */
-async function setupDependencies(): Promise<void> {
-  startGroup("Installing System Dependencies");
-
-  try {
-    // Setup Python 3
-    const pythonPath =
-      (await which("python3", false)) || (await which("python", false));
-    if (!pythonPath) {
-      safeInfo("Installing Python 3.12 via python-build-standalone...");
-      const pythonVersion = "3.12.9";
-      const releaseTag = "20250409";
-      const pythonUrl =
-        `https://github.com/astral-sh/python-build-standalone/releases/download/${releaseTag}/cpython-${pythonVersion}%2B${releaseTag}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
-      const downloadedPython = await downloadTool(pythonUrl);
-      const extractedPythonDir = await extractTar(downloadedPython);
-      const cachedPython = await cacheDir(
-        join(extractedPythonDir, "python"),
-        "python",
-        pythonVersion,
-      );
-      addPath(join(cachedPython, "bin"));
-      safeInfo("Python installed successfully.");
-    } else {
-      safeInfo(`Python is already installed at ${pythonPath}.`);
-    }
-
-    // Setup wget
-    const wgetPath = await which("wget", false);
-    if (!wgetPath) {
-      safeInfo("Installing wget via static binary...");
-      const wgetVersion = "1.25.0";
-      const wgetUrl =
-        `https://github.com/userdocs/qbt-workflow-files/releases/latest/download/wget`;
-      const downloadedWget = await downloadTool(wgetUrl);
-      await safeExec("chmod", ["+x", downloadedWget]);
-      const cachedWget = await cacheFile(
-        downloadedWget,
-        "wget",
-        "wget",
-        wgetVersion,
-      );
-      addPath(cachedWget);
-      safeInfo("wget installed successfully.");
-    } else {
-      safeInfo(`wget is already installed at ${wgetPath}.`);
-    }
-
-    // Setup Java 21 (Adoptium Temurin)
-    const javaPath = await which("java", false);
-    if (!javaPath) {
-      safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
-      const javaVersion = "21";
-      // Adoptium API redirect — always points to the latest JDK 21 GA release
-      const javaUrl =
-        "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk";
-      const downloadedJava = await downloadTool(javaUrl);
-      const extractedJavaDir = await extractTar(downloadedJava);
-
-      // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-      const dirContents = readdirSync(extractedJavaDir);
-      const jdkDir =
-        dirContents.find((name) => name.startsWith("jdk-")) || dirContents[0];
-      const javaHomePath = join(extractedJavaDir, jdkDir);
-
-      const cachedJava = await cacheDir(javaHomePath, "java", javaVersion);
-      addPath(join(cachedJava, "bin"));
-      safeInfo(`Java installed at ${cachedJava}.`);
-    } else {
-      safeInfo(`Java is already installed at ${javaPath}.`);
-    }
-
-    // Setup Kind
-    const kindVersion = "v0.29.0";
-    const kindPath = await which("kind", false);
-    if (!kindPath) {
-      safeInfo(`Downloading Kind ${kindVersion}...`);
-      const kindUrl = `https://kind.sigs.k8s.io/dl/${kindVersion}/kind-linux-amd64`;
-      const downloadedKind = await downloadTool(kindUrl);
-      await safeExec("chmod", ["+x", downloadedKind]);
-      const cachedKind = await cacheFile(
-        downloadedKind,
-        "kind",
-        "kind",
-        kindVersion,
-      );
-      addPath(cachedKind);
-    }
-
-    // Setup kubectl
-    const k8sVersion = "v1.32.2";
-    const kubectlPath = await which("kubectl", false);
-    if (!kubectlPath) {
-      safeInfo(`Downloading kubectl ${k8sVersion}...`);
-      const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
-      const downloadedKubectl = await downloadTool(kubectlUrl);
-      await safeExec("chmod", ["+x", downloadedKubectl]);
-      const cachedKubectl = await cacheFile(
-        downloadedKubectl,
-        "kubectl",
-        "kubectl",
-        k8sVersion,
-      );
-      addPath(cachedKubectl);
-    }
-
-    // Install Solo CLI
-    const soloVersion = getInput("soloVersion") || "latest";
-    safeInfo(`Installing Solo CLI version: ${soloVersion}`);
-    await safeExec(`npm install -g @hashgraph/solo@${soloVersion}`);
-
-    safeInfo("✅ All dependencies installed successfully.");
-  } catch (error) {
-    throw new Error(
-      `Dependency setup failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    endGroup();
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Solo CLI Helper Functions (version-aware)
+// Solo CLI Helper Functions
 // ---------------------------------------------------------------------------
 
 /**
@@ -884,20 +704,20 @@ function safeSetFailed(message: string): void {
  */
 async function run(): Promise<void> {
   try {
-    // Phase 1: Install all dependencies
+    // Install all dependencies
     await setupDependencies();
 
-    // Phase 2: Detect Solo CLI version
+    // Detect Solo CLI version
     const soloGe0440 = await checkSoloVersion();
 
-    // Phase 3: Deploy Solo test network
+    // Deploy Solo test network
     await deploySoloTestNetwork(soloGe0440);
 
-    // Phase 4: Deploy optional services
+    // Deploy optional services
     await deployMirrorNode(soloGe0440);
     await deployRelay(soloGe0440);
 
-    // Phase 5: Create accounts
+    // Create accounts
     await createAccount("ecdsa", soloGe0440);
     await createAccount("ed25519", soloGe0440);
   } catch (error) {
