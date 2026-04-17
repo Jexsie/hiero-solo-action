@@ -19,7 +19,7 @@ import {
   safeReadFileSync,
   portForwardIfExists,
   extractAccountAsJson,
-} from "./utils";
+} from "./utils.js";
 
 interface AccountInfo {
   accountId: string;
