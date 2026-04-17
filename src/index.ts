@@ -70,37 +70,17 @@ async function checkSoloVersion(): Promise<boolean> {
     const combined = `${stdout}\n${stderr}`.trim();
     safeInfo(`[checkSoloVersion] raw output: ${combined}`);
 
-    let version: string | undefined;
+    // Match "Version<whitespace>:<whitespace>X.Y.Z" from the Solo banner
+    const match = combined.match(/Version\s*:\s*(\d+\.\d+\.\d+)/);
 
-    // Pattern 1: oclif format "@hashgraph/solo/X.Y.Z" or "solo/X.Y.Z"
-    const oclif = combined.match(/solo\/(\d+\.\d+\.\d+)/i);
-    if (oclif) {
-      version = oclif[1];
-    }
-
-    // Pattern 2: "Version X.Y.Z"
-    if (!version) {
-      const banner = combined.match(/Version\s+(\d+\.\d+\.\d+)/i);
-      if (banner) {
-        version = banner[1];
-      }
-    }
-
-    // Pattern 3: bare semver anywhere in the output
-    if (!version) {
-      const bare = combined.match(/(\d+\.\d+\.\d+)/);
-      if (bare) {
-        version = bare[1];
-      }
-    }
-
-    if (!version) {
+    if (!match) {
       safeInfo(
         `[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.`,
       );
       return true;
     }
 
+    const version = match[1];
     const ge0440 = isVersionGte(version, "0.44.0");
     safeInfo(`[checkSoloVersion] version=${version}, >= 0.44.0: ${ge0440}`);
     return ge0440;
@@ -531,8 +511,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
   const dualMode = safeGetInput("dualMode") === "true";
   const haproxyPort = safeGetInput("haproxyPort") || "50211";
   const grpcProxyPort = safeGetInput("grpcProxyPort") || "9998";
-  const dualModeGrpcProxyPort =
-    safeGetInput("dualModeGrpcProxyPort") || "9999";
+  const dualModeGrpcProxyPort = safeGetInput("dualModeGrpcProxyPort") || "9999";
 
   if (!hieroVersion) {
     safeInfo("Hiero version not found, skipping deployment");
@@ -549,8 +528,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
   try {
     saveState("clusterName", clusterName);
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to save cluster name state: ${errorMessage}`);
   }
 
@@ -559,12 +537,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
     await initializeSolo();
     await connectSoloToCluster(clusterName, soloGe0440);
     await createSoloDeployment(namespace, deployment, soloGe0440);
-    await addClusterToDeployment(
-      deployment,
-      clusterName,
-      numNodes,
-      soloGe0440,
-    );
+    await addClusterToDeployment(deployment, clusterName, numNodes, soloGe0440);
     await generateNodeKeys(deployment, nodeIds, soloGe0440);
     await setupSoloCluster(clusterName, soloGe0440);
     await deployNetwork(deployment, nodeIds, hieroVersion, soloGe0440);
@@ -587,11 +560,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
 
     // Port forwards for node2 if dual mode is enabled
     if (dualMode) {
-      await portForwardIfExists(
-        "haproxy-node2-svc",
-        "51211:50211",
-        namespace,
-      );
+      await portForwardIfExists("haproxy-node2-svc", "51211:50211", namespace);
       safeInfo("HAProxy for node2 is accessible on port 51211");
 
       await portForwardIfExists(
@@ -611,8 +580,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
       namespace,
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to deploy Solo test network: ${errorMessage}`);
   }
 }
@@ -685,24 +653,15 @@ async function deployMirrorNode(soloGe0440: boolean): Promise<void> {
 
     // Port forward Mirror Node services
     await portForwardIfExists("mirror-1-rest", `${portRest}:80`, namespace);
-    await portForwardIfExists(
-      "mirror-1-grpc",
-      `${portGrpc}:5600`,
-      namespace,
-    );
-    await portForwardIfExists(
-      "mirror-1-web3",
-      `${portWeb3}:80`,
-      namespace,
-    );
+    await portForwardIfExists("mirror-1-grpc", `${portGrpc}:5600`, namespace);
+    await portForwardIfExists("mirror-1-web3", `${portWeb3}:80`, namespace);
     await portForwardIfExists(
       "mirror-1-restjava",
       `${javaRestApiPort}:80`,
       namespace,
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to deploy Mirror Node: ${errorMessage}`);
   }
 }
@@ -765,11 +724,8 @@ async function deployRelay(soloGe0440: boolean): Promise<void> {
       namespace,
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
-    safeInfo(
-      `Relay service deployment failed: ${errorMessage}, continuing...`,
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    safeInfo(`Relay service deployment failed: ${errorMessage}, continuing...`);
   }
 }
 
@@ -813,9 +769,7 @@ async function createAccount(
     const { accountId, publicKey } = accountInfo;
 
     if (!accountId || !publicKey) {
-      safeInfo(
-        "Account ID or public key not found, skipping account creation",
-      );
+      safeInfo("Account ID or public key not found, skipping account creation");
       return;
     }
 
@@ -868,8 +822,7 @@ async function createAccount(
       safeSetOutput("privateKey", privateKey.trim());
     }
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to create ${type} account: ${errorMessage}`);
   }
 }
@@ -910,8 +863,7 @@ async function run(): Promise<void> {
     await createAccount("ecdsa", soloGe0440);
     await createAccount("ed25519", soloGe0440);
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     safeSetFailed(`Script execution failed: ${errorMessage}`);
   }
 }
