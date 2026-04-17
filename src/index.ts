@@ -9,6 +9,8 @@ import {
   endGroup,
 } from "@actions/core";
 import { downloadTool, cacheFile } from "@actions/tool-cache";
+import { existsSync } from "fs";
+import { join } from "path";
 import {
   safeInfo,
   safeExec,
@@ -25,13 +27,61 @@ interface AccountInfo {
   balance: number;
 }
 
-async function setupDependencies() {
+/**
+ * Compares two semver-like version strings.
+ * Returns true if `version` >= `target`.
+ */
+function isVersionGte(version: string, target: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+  const [aMajor = 0, aMinor = 0, aPatch = 0] = parse(version);
+  const [bMajor = 0, bMinor = 0, bPatch = 0] = parse(target);
+
+  if (aMajor !== bMajor) return aMajor > bMajor;
+  if (aMinor !== bMinor) return aMinor > bMinor;
+  return aPatch >= bPatch;
+}
+
+/**
+ * Detects the installed Solo CLI version and whether it is >= 0.44.0.
+ */
+async function checkSoloVersion(): Promise<boolean> {
+  let versionOutput = "";
+  await safeExec("solo", ["--version"], {
+    listeners: {
+      stdout: (data: Buffer) => {
+        versionOutput += data.toString();
+      },
+    },
+  });
+
+  // Output format: "Version X.Y.Z" or similar
+  const match = versionOutput.match(/Version\s+(\S+)/i);
+  if (!match) {
+    safeInfo(
+      `Could not parse Solo version from output: ${versionOutput}. Assuming >= 0.44.0.`,
+    );
+    return true;
+  }
+
+  const version = match[1];
+  const ge0440 = isVersionGte(version, "0.44.0");
+  safeInfo(
+    `Solo version: ${version}, >= 0.44.0: ${ge0440}`,
+  );
+  return ge0440;
+}
+
+/**
+ * Installs all system-level dependencies required by the action:
+ * wget, python, Java 21, Kind, kubectl, and Solo CLI.
+ */
+async function setupDependencies(): Promise<void> {
   startGroup("Installing System Dependencies");
 
   try {
-    // 1. Install WGet & Python (Standard OS packages)
+    // 1. Install wget & Python (Standard OS packages)
     safeInfo(
-      "Updating apt and installing Wget, Python, Java 21, Kind, and Kubectl",
+      "Updating apt and installing wget, Python, Java 21, Kind, and kubectl",
     );
     await exec("sudo apt-get update");
     await exec("sudo apt-get install -y wget python3.10");
@@ -43,7 +93,7 @@ async function setupDependencies() {
       await exec("sudo apt-get install -y openjdk-21-jdk");
     }
 
-    // Setups Kind
+    // 3. Setup Kind
     const kindVersion = "v0.29.0";
     const kindPath = await which("kind", false);
     if (!kindPath) {
@@ -60,7 +110,7 @@ async function setupDependencies() {
       addPath(cachedKind);
     }
 
-    // Setups Kubectl (required by Kind)
+    // 4. Setup kubectl
     const k8sVersion = "v1.32.2";
     const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
     const downloadedKubectl = await downloadTool(kubectlUrl);
@@ -73,12 +123,10 @@ async function setupDependencies() {
     );
     addPath(cachedKubectl);
 
-    // Installs Solo CLI
+    // 5. Install Solo CLI
     const soloVersion = getInput("soloVersion") || "latest";
     safeInfo(`Installing Solo CLI version: ${soloVersion}`);
-    // We use --unsafe-perm if running as root in some containers,
-    // but usually standard global install works on GH runners.
-    await exec("sudo npm install -g @hashgraph/solo@" + soloVersion);
+    await exec(`sudo npm install -g @hashgraph/solo@${soloVersion}`);
 
     safeInfo("✅ All dependencies installed successfully.");
   } catch (error) {
@@ -89,6 +137,10 @@ async function setupDependencies() {
     endGroup();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Solo CLI Helper Functions (version-aware)
+// ---------------------------------------------------------------------------
 
 /**
  * Creates a Kubernetes cluster using kind
@@ -107,15 +159,32 @@ async function initializeSolo(): Promise<void> {
 /**
  * Connects Solo CLI to the kind cluster
  */
-async function connectSoloToCluster(clusterName: string): Promise<void> {
-  await safeExec("solo", [
-    "cluster-ref",
-    "connect",
-    "--cluster-ref",
-    `kind-${clusterName}`,
-    "--context",
-    `kind-${clusterName}`,
-  ]);
+async function connectSoloToCluster(
+  clusterName: string,
+  soloGe0440: boolean,
+): Promise<void> {
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "cluster-ref",
+      "config",
+      "connect",
+      "--cluster-ref",
+      `kind-${clusterName}`,
+      "--context",
+      `kind-${clusterName}`,
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "cluster-ref",
+      "connect",
+      "--cluster-ref",
+      `kind-${clusterName}`,
+      "--context",
+      `kind-${clusterName}`,
+      "--dev",
+    ]);
+  }
 }
 
 /**
@@ -124,15 +193,30 @@ async function connectSoloToCluster(clusterName: string): Promise<void> {
 async function createSoloDeployment(
   namespace: string,
   deployment: string,
+  soloGe0440: boolean,
 ): Promise<void> {
-  await safeExec("solo", [
-    "deployment",
-    "create",
-    "-n",
-    namespace,
-    "--deployment",
-    deployment,
-  ]);
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "deployment",
+      "config",
+      "create",
+      "-n",
+      namespace,
+      "--deployment",
+      deployment,
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "deployment",
+      "create",
+      "-n",
+      namespace,
+      "--deployment",
+      deployment,
+      "--dev",
+    ]);
+  }
 }
 
 /**
@@ -141,204 +225,493 @@ async function createSoloDeployment(
 async function addClusterToDeployment(
   deployment: string,
   clusterName: string,
+  numNodes: number,
+  soloGe0440: boolean,
 ): Promise<void> {
-  await safeExec("solo", [
-    "deployment",
-    "add-cluster",
-    "--deployment",
-    deployment,
-    "--cluster-ref",
-    `kind-${clusterName}`,
-    "--num-consensus-nodes",
-    "1",
-  ]);
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "deployment",
+      "cluster",
+      "attach",
+      "--deployment",
+      deployment,
+      "--cluster-ref",
+      `kind-${clusterName}`,
+      "--num-consensus-nodes",
+      String(numNodes),
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "deployment",
+      "add-cluster",
+      "--deployment",
+      deployment,
+      "--cluster-ref",
+      `kind-${clusterName}`,
+      "--num-consensus-nodes",
+      String(numNodes),
+      "--dev",
+    ]);
+  }
 }
 
 /**
- * Generates keys for the node
+ * Generates keys for the consensus nodes
  */
-async function generateNodeKeys(deployment: string): Promise<void> {
-  await safeExec("solo", [
-    "node",
-    "keys",
-    "--gossip-keys",
-    "--tls-keys",
-    "-i",
-    "node1",
-    "--deployment",
-    deployment,
-  ]);
+async function generateNodeKeys(
+  deployment: string,
+  nodeIds: string,
+  soloGe0440: boolean,
+): Promise<void> {
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "keys",
+      "consensus",
+      "generate",
+      "--gossip-keys",
+      "--tls-keys",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "node",
+      "keys",
+      "--gossip-keys",
+      "--tls-keys",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--dev",
+    ]);
+  }
 }
 
 /**
  * Sets up the Solo cluster
  */
-async function setupSoloCluster(clusterName: string): Promise<void> {
-  await safeExec("solo", ["cluster-ref", "setup", "-s", clusterName]);
+async function setupSoloCluster(
+  clusterName: string,
+  soloGe0440: boolean,
+): Promise<void> {
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "cluster-ref",
+      "config",
+      "setup",
+      "-s",
+      clusterName,
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "cluster-ref",
+      "setup",
+      "-s",
+      clusterName,
+      "--dev",
+    ]);
+  }
 }
 
 /**
  * Deploys the network
  */
-async function deployNetwork(deployment: string): Promise<void> {
-  await safeExec("solo", [
-    "network",
-    "deploy",
-    "-i",
-    "node1",
-    "--deployment",
-    deployment,
-  ]);
+async function deployNetwork(
+  deployment: string,
+  nodeIds: string,
+  hieroVersion: string,
+  soloGe0440: boolean,
+): Promise<void> {
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "consensus",
+      "network",
+      "deploy",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--release-tag",
+      hieroVersion,
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "network",
+      "deploy",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--release-tag",
+      hieroVersion,
+      "--dev",
+    ]);
+  }
 }
 
 /**
- * Sets up the node
+ * Sets up the consensus nodes
  */
 async function setupNode(
   deployment: string,
+  nodeIds: string,
   hieroVersion: string,
+  soloGe0440: boolean,
 ): Promise<void> {
-  await safeExec("solo", [
-    "node",
-    "setup",
-    "-i",
-    "node1",
-    "--deployment",
-    deployment,
-    "-t",
-    hieroVersion,
-    "--quiet-mode",
-  ]);
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "consensus",
+      "node",
+      "setup",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--release-tag",
+      hieroVersion,
+      "--quiet-mode",
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "node",
+      "setup",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--release-tag",
+      hieroVersion,
+      "--quiet-mode",
+      "--dev",
+    ]);
+  }
 }
 
 /**
- * Starts the node
+ * Starts the consensus nodes
  */
-async function startNode(deployment: string): Promise<void> {
-  await safeExec("solo", [
-    "node",
-    "start",
-    "-i",
-    "node1",
-    "--deployment",
-    deployment,
-  ]);
+async function startNode(
+  deployment: string,
+  nodeIds: string,
+  soloGe0440: boolean,
+): Promise<void> {
+  if (soloGe0440) {
+    await safeExec("solo", [
+      "consensus",
+      "node",
+      "start",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--dev",
+    ]);
+  } else {
+    await safeExec("solo", [
+      "node",
+      "start",
+      "-i",
+      nodeIds,
+      "--deployment",
+      deployment,
+      "--dev",
+    ]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// High-level orchestration functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Adds entries to /etc/hosts for the consensus nodes.
+ */
+async function setupHostsEntries(
+  namespace: string,
+  dualMode: boolean,
+): Promise<void> {
+  try {
+    // Check if we have sudo access
+    const sudoCheck = await exec("sudo", ["-n", "true"], {
+      ignoreReturnCode: true,
+    });
+
+    if (sudoCheck === 0) {
+      const entries = [
+        `127.0.0.1 network-node1-svc.${namespace}.svc.cluster.local`,
+        `127.0.0.1 envoy-proxy-node1-svc.${namespace}.svc.cluster.local`,
+      ];
+
+      if (dualMode) {
+        entries.push(
+          `127.0.0.1 network-node2-svc.${namespace}.svc.cluster.local`,
+          `127.0.0.1 envoy-proxy-node2-svc.${namespace}.svc.cluster.local`,
+        );
+      }
+
+      for (const entry of entries) {
+        await safeExec("bash", [
+          "-c",
+          `echo "${entry}" | sudo tee -a /etc/hosts`,
+        ]);
+      }
+      safeInfo("Successfully added entries to /etc/hosts");
+    } else {
+      safeInfo(
+        "⚠️  No sudo access available, skipping /etc/hosts update. Nodes can still be accessed via localhost.",
+      );
+    }
+  } catch {
+    safeInfo("⚠️  Failed to update /etc/hosts, continuing...");
+  }
 }
 
 /**
- * Deploys a Solo test network
- * This creates a new Kubernetes cluster using kind, initializes the Solo CLI configuration,
- * connects the Solo CLI to the kind cluster, creates a new deployment, adds the kind cluster
- * to the deployment with 1 consensus node, generates keys for the node, sets up the Solo cluster,
- * deploys the network, sets up the node, and starts the node
- * @returns void
+ * Deploys a Solo test network with full support for:
+ * - Solo version-aware commands (>= 0.44.0 vs < 0.44.0)
+ * - Dual mode (1 or 2 consensus nodes)
+ * - /etc/hosts entries
+ * - Configurable port-forwarding (HAProxy, gRPC proxy)
  */
-async function deploySoloTestNetwork(): Promise<void> {
+async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
   const clusterName = "solo-e2e";
   const namespace = "solo";
   const deployment = "solo-deployment";
   const hieroVersion = safeGetInput("hieroVersion");
+  const dualMode = safeGetInput("dualMode") === "true";
+  const haproxyPort = safeGetInput("haproxyPort") || "50211";
+  const grpcProxyPort = safeGetInput("grpcProxyPort") || "9998";
+  const dualModeGrpcProxyPort =
+    safeGetInput("dualModeGrpcProxyPort") || "9999";
 
   if (!hieroVersion) {
     safeInfo("Hiero version not found, skipping deployment");
     return;
   }
 
+  const numNodes = dualMode ? 2 : 1;
+  const nodeIds = dualMode ? "node1,node2" : "node1";
+
+  safeInfo(`Deploying ${numNodes} consensus node(s)...`);
+
   try {
     saveState("clusterName", clusterName);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to save cluster name state: ${errorMessage}`);
   }
 
   try {
     await createKindCluster(clusterName);
     await initializeSolo();
-    await connectSoloToCluster(clusterName);
-    await createSoloDeployment(namespace, deployment);
-    await addClusterToDeployment(deployment, clusterName);
-    await generateNodeKeys(deployment);
-    await setupSoloCluster(clusterName);
-    await deployNetwork(deployment);
-    await setupNode(deployment, hieroVersion);
-    await startNode(deployment);
+    await connectSoloToCluster(clusterName, soloGe0440);
+    await createSoloDeployment(namespace, deployment, soloGe0440);
+    await addClusterToDeployment(
+      deployment,
+      clusterName,
+      numNodes,
+      soloGe0440,
+    );
+    await generateNodeKeys(deployment, nodeIds, soloGe0440);
+    await setupSoloCluster(clusterName, soloGe0440);
+    await deployNetwork(deployment, nodeIds, hieroVersion, soloGe0440);
+    await setupNode(deployment, nodeIds, hieroVersion, soloGe0440);
+    await startNode(deployment, nodeIds, soloGe0440);
 
     // Debug: List services in the solo namespace
+    safeInfo(`Listing services in namespace ${namespace}:`);
     await safeExec("kubectl", ["get", "svc", "-n", namespace]);
 
-    // Port forward the HAProxy service
-    await portForwardIfExists("haproxy-node1-svc", "50211:50211", namespace);
+    // Add /etc/hosts entries
+    await setupHostsEntries(namespace, dualMode);
+
+    // Port forward HAProxy for node1
+    await portForwardIfExists(
+      "haproxy-node1-svc",
+      `${haproxyPort}:50211`,
+      namespace,
+    );
+
+    // Port forwards for node2 if dual mode is enabled
+    if (dualMode) {
+      await portForwardIfExists(
+        "haproxy-node2-svc",
+        "51211:50211",
+        namespace,
+      );
+      safeInfo("HAProxy for node2 is accessible on port 51211");
+
+      await portForwardIfExists(
+        "envoy-proxy-node2-svc",
+        `${dualModeGrpcProxyPort}:8080`,
+        namespace,
+      );
+      safeInfo(
+        `gRPC proxy for node2 is accessible on port ${dualModeGrpcProxyPort}`,
+      );
+    }
+
+    // Port forward gRPC proxy for node1
+    await portForwardIfExists(
+      "envoy-proxy-node1-svc",
+      `${grpcProxyPort}:8080`,
+      namespace,
+    );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to deploy Solo test network: ${errorMessage}`);
   }
 }
 
 /**
- * Deploys a Mirror Node
- * This deploys a Mirror Node in the Solo cluster.
- * @returns void
+ * Deploys a Mirror Node.
+ * Also deploys when installRelay is true since the relay expects
+ * mirror-ingress-controller.
  */
-async function deployMirrorNode(): Promise<void> {
+async function deployMirrorNode(soloGe0440: boolean): Promise<void> {
   const installMirrorNode = safeGetInput("installMirrorNode") === "true";
-  if (!installMirrorNode) return;
+  const installRelay = safeGetInput("installRelay") === "true";
+
+  // Mirror node is required when installRelay is true
+  if (!installMirrorNode && !installRelay) return;
 
   const namespace = "solo";
   const deployment = "solo-deployment";
+  const clusterName = "solo-e2e";
   const version = safeGetInput("mirrorNodeVersion");
-  const portRest = safeGetInput("mirrorNodePortRest");
-  const portGrpc = safeGetInput("mirrorNodePortGrpc");
-  const portWeb3 = safeGetInput("mirrorNodePortWeb3Rest");
+  const portRest = safeGetInput("mirrorNodePortRest") || "5551";
+  const portGrpc = safeGetInput("mirrorNodePortGrpc") || "5600";
+  const portWeb3 = safeGetInput("mirrorNodePortWeb3Rest") || "8545";
+  const javaRestApiPort = safeGetInput("javaRestApiPort") || "8084";
+
+  // Relay requires mirror-ingress-controller; --enable-ingress installs it.
+  const enableIngress = installRelay;
 
   try {
-    // Deploy the Mirror Node
-    await safeExec("solo", [
-      "mirror-node",
-      "deploy",
-      "--deployment",
-      deployment,
-      "--mirror-node-version",
-      version,
-    ]);
+    const baseArgs: string[] = [];
 
-    // List services in the solo namespace
+    if (soloGe0440) {
+      baseArgs.push(
+        "mirror",
+        "node",
+        "add",
+        "--cluster-ref",
+        `kind-${clusterName}`,
+        "--deployment",
+        deployment,
+        "--mirror-node-version",
+        version,
+        "--pinger",
+      );
+    } else {
+      baseArgs.push(
+        "mirror-node",
+        "deploy",
+        "--cluster-ref",
+        `kind-${clusterName}`,
+        "--deployment",
+        deployment,
+        "--mirror-node-version",
+        version,
+        "--pinger",
+      );
+    }
+
+    if (enableIngress) {
+      baseArgs.push("--enable-ingress");
+    }
+
+    baseArgs.push("--dev");
+
+    await safeExec("solo", baseArgs);
+
+    // Debug: List services in the solo namespace
+    safeInfo(`Listing services in namespace ${namespace}:`);
     await safeExec("kubectl", ["get", "svc", "-n", namespace]);
 
-    // Port forward the Mirror Node services
-    await portForwardIfExists("mirror-rest", `${portRest}:80`, namespace);
-    await portForwardIfExists("mirror-grpc", `${portGrpc}:5600`, namespace);
-    await portForwardIfExists("mirror-web3", `${portWeb3}:80`, namespace);
+    // Port forward Mirror Node services
+    await portForwardIfExists("mirror-1-rest", `${portRest}:80`, namespace);
+    await portForwardIfExists(
+      "mirror-1-grpc",
+      `${portGrpc}:5600`,
+      namespace,
+    );
+    await portForwardIfExists(
+      "mirror-1-web3",
+      `${portWeb3}:80`,
+      namespace,
+    );
+    await portForwardIfExists(
+      "mirror-1-restjava",
+      `${javaRestApiPort}:80`,
+      namespace,
+    );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to deploy Mirror Node: ${errorMessage}`);
   }
 }
 
 /**
- * Deploys a Relay
- * This deploys a Relay in the Solo cluster
- * @returns void
+ * Deploys the JSON-RPC Relay.
  */
-async function deployRelay(): Promise<void> {
+async function deployRelay(soloGe0440: boolean): Promise<void> {
   const installRelay = safeGetInput("installRelay") === "true";
   if (!installRelay) return;
 
   const namespace = "solo";
   const deployment = "solo-deployment";
-  const relayPort = safeGetInput("relayPort");
+  const relayPort = safeGetInput("relayPort") || "7546";
 
   try {
-    // Deploy the Relay
-    await safeExec("solo", [
-      "relay",
-      "deploy",
-      "-i",
-      "node1",
-      "--deployment",
-      deployment,
-    ]);
+    const baseArgs: string[] = [];
 
-    // List services in the solo namespace
+    if (soloGe0440) {
+      baseArgs.push(
+        "relay",
+        "node",
+        "add",
+        "-i",
+        "node1",
+        "--deployment",
+        deployment,
+        "--dev",
+      );
+    } else {
+      baseArgs.push(
+        "relay",
+        "deploy",
+        "-i",
+        "node1",
+        "--deployment",
+        deployment,
+        "--dev",
+      );
+    }
+
+    // Add --values-file if relay-low-resources.yaml exists
+    const workspacePath = process.env.GITHUB_WORKSPACE || ".";
+    const relayValuesFile = join(workspacePath, "relay-low-resources.yaml");
+    if (existsSync(relayValuesFile)) {
+      baseArgs.push("--values-file", relayValuesFile);
+    }
+
+    await safeExec("solo", baseArgs);
+    safeInfo("JSON-RPC-Relay installed successfully");
+
+    // Debug: List services in the solo namespace
+    safeInfo(`Listing services in namespace ${namespace}:`);
     await safeExec("kubectl", ["get", "svc", "-n", namespace]);
 
     // Port forward the Relay service
@@ -348,54 +721,63 @@ async function deployRelay(): Promise<void> {
       namespace,
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    safeInfo(`Relay service deployment failed: ${errorMessage}, continuing...`);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    safeInfo(
+      `Relay service deployment failed: ${errorMessage}, continuing...`,
+    );
   }
 }
 
 /**
- * Creates an account
- * This creates an account in the Solo cluster
- * @param type - The type of account to create (ecdsa or ed25519)
- * @returns void
+ * Creates an account (ECDSA or ED25519) with Solo version-aware commands.
  */
-async function createAccount(type: "ecdsa" | "ed25519"): Promise<void> {
+async function createAccount(
+  type: "ecdsa" | "ed25519",
+  soloGe0440: boolean,
+): Promise<void> {
   const namespace = "solo";
   const deployment = "solo-deployment";
   const outputFile = `account_create_output_${type}.txt`;
-  const generateFlag = type === "ecdsa" ? "--generate-ecdsa-key" : "";
+  const hbarAmount = safeGetInput("hbarAmount") || "10000000";
+
+  safeInfo(`Creating ${type.toUpperCase()} account...`);
 
   try {
-    // Create an account
-    const createCommand = `solo account create ${generateFlag} --deployment "${deployment}" > ${outputFile}`;
+    // Build the create command
+    const createArgs: string[] = [];
+    if (soloGe0440) {
+      createArgs.push("ledger", "account", "create");
+    } else {
+      createArgs.push("account", "create");
+    }
+
+    if (type === "ecdsa") {
+      createArgs.push("--generate-ecdsa-key");
+    }
+
+    createArgs.push("--deployment", deployment, "--dev");
+
+    // Execute and redirect output to file
+    const createCommand = `solo ${createArgs.join(" ")} > ${outputFile}`;
     await safeExec("bash", ["-c", createCommand]);
 
-    const extractAccountJson = (): string => {
-      try {
-        const content = safeReadFileSync(outputFile);
-        return extractAccountAsJson(content);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Failed to read or parse account file: ${errorMessage}`,
-        );
-      }
-    };
-
-    const accountJson = extractAccountJson();
+    // Read and parse the output
+    const content = safeReadFileSync(outputFile);
+    const accountJson = extractAccountAsJson(content);
     const accountInfo = JSON.parse(accountJson) as AccountInfo;
     const { accountId, publicKey } = accountInfo;
 
     if (!accountId || !publicKey) {
-      safeInfo("Account ID or public key not found, skipping account creation");
+      safeInfo(
+        "Account ID or public key not found, skipping account creation",
+      );
       return;
     }
 
+    // Get the private key from the Kubernetes secret
     const privateKeyCmd = `kubectl get secret account-key-${accountId} -n ${namespace} -o jsonpath='{.data.privateKey}' | base64 -d | xargs`;
     let privateKey = "";
-
-    // Get the private key
     await safeExec("bash", ["-c", privateKeyCmd], {
       listeners: {
         stdout: (data: Buffer) => {
@@ -404,17 +786,27 @@ async function createAccount(type: "ecdsa" | "ed25519"): Promise<void> {
       },
     });
 
-    // Update the account
-    await safeExec("solo", [
-      "account",
-      "update",
+    // Update the account with the specified hbar amount
+    const updateArgs: string[] = [];
+    if (soloGe0440) {
+      updateArgs.push("ledger", "account", "update");
+    } else {
+      updateArgs.push("account", "update");
+    }
+    updateArgs.push(
       "--account-id",
       accountId,
       "--hbar-amount",
-      "10000000",
+      hbarAmount,
       "--deployment",
       deployment,
-    ]);
+      "--dev",
+    );
+    await safeExec("solo", updateArgs);
+
+    safeInfo(`accountId=${accountId}`);
+    safeInfo(`publicKey=${publicKey}`);
+    safeInfo(`privateKey=${privateKey.trim()}`);
 
     // Set outputs based on account type
     if (type === "ecdsa") {
@@ -432,39 +824,50 @@ async function createAccount(type: "ecdsa" | "ed25519"): Promise<void> {
       safeSetOutput("privateKey", privateKey.trim());
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to create ${type} account: ${errorMessage}`);
   }
 }
 
 /**
  * Safely sets failed state with proper error handling
- * @param message - The error message to set
  */
 function safeSetFailed(message: string): void {
   try {
     setFailed(message);
-  } catch (error) {
+  } catch {
     console.error(`Failed to set failed state: ${message}`);
     process.exit(1);
   }
 }
 
 /**
- * Runs the script
- * This runs the script to deploy the Solo test network, Mirror Node, Relay, and create an account
- * @returns void
+ * Main entry point.
+ * Installs dependencies, detects Solo version, deploys the test network,
+ * optionally deploys Mirror Node and Relay, and creates accounts.
  */
 async function run(): Promise<void> {
   try {
+    // Phase 1: Install all dependencies
     await setupDependencies();
-    await deploySoloTestNetwork();
-    await deployMirrorNode();
-    await deployRelay();
-    await createAccount("ecdsa");
-    await createAccount("ed25519");
+
+    // Phase 2: Detect Solo CLI version
+    const soloGe0440 = await checkSoloVersion();
+
+    // Phase 3: Deploy Solo test network
+    await deploySoloTestNetwork(soloGe0440);
+
+    // Phase 4: Deploy optional services
+    await deployMirrorNode(soloGe0440);
+    await deployRelay(soloGe0440);
+
+    // Phase 5: Create accounts
+    await createAccount("ecdsa", soloGe0440);
+    await createAccount("ed25519", soloGe0440);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
     safeSetFailed(`Script execution failed: ${errorMessage}`);
   }
 }
