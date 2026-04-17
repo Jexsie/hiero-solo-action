@@ -1,7 +1,8 @@
 import { setFailed, saveState } from "@actions/core";
 import { setupDependencies, checkSoloVersion } from "./setup.js";
 import {
-  safeExec,
+  soloRun,
+  runCommand,
   safeGetInput,
   safeSetOutput,
   safeReadFileSync,
@@ -26,14 +27,14 @@ interface AccountInfo {
  * Creates a Kubernetes cluster using kind
  */
 async function createKindCluster(clusterName: string): Promise<void> {
-  await safeExec("kind", ["create", "cluster", "-n", clusterName]);
+  await runCommand(`kind create cluster -n ${clusterName}`);
 }
 
 /**
  * Initializes Solo CLI configuration
  */
 async function initializeSolo(): Promise<void> {
-  await safeExec("solo", ["init", "--dev"]);
+  await soloRun("solo init --dev");
 }
 
 /**
@@ -44,26 +45,13 @@ async function connectSoloToCluster(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "cluster-ref",
-      "config",
-      "connect",
-      "--cluster-ref",
-      `kind-${clusterName}`,
-      "--context",
-      `kind-${clusterName}`,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo cluster-ref config connect --cluster-ref kind-${clusterName} --context kind-${clusterName} --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "cluster-ref",
-      "connect",
-      "--cluster-ref",
-      `kind-${clusterName}`,
-      "--context",
-      `kind-${clusterName}`,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo cluster-ref connect --cluster-ref kind-${clusterName} --context kind-${clusterName} --dev`,
+    );
   }
 }
 
@@ -76,26 +64,13 @@ async function createSoloDeployment(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "deployment",
-      "config",
-      "create",
-      "-n",
-      namespace,
-      "--deployment",
-      deployment,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo deployment config create -n ${namespace} --deployment ${deployment} --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "deployment",
-      "create",
-      "-n",
-      namespace,
-      "--deployment",
-      deployment,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo deployment create -n ${namespace} --deployment ${deployment} --dev`,
+    );
   }
 }
 
@@ -109,30 +84,13 @@ async function addClusterToDeployment(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "deployment",
-      "cluster",
-      "attach",
-      "--deployment",
-      deployment,
-      "--cluster-ref",
-      `kind-${clusterName}`,
-      "--num-consensus-nodes",
-      String(numNodes),
-      "--dev",
-    ]);
+    await soloRun(
+      `solo deployment cluster attach --deployment ${deployment} --cluster-ref kind-${clusterName} --num-consensus-nodes ${numNodes} --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "deployment",
-      "add-cluster",
-      "--deployment",
-      deployment,
-      "--cluster-ref",
-      `kind-${clusterName}`,
-      "--num-consensus-nodes",
-      String(numNodes),
-      "--dev",
-    ]);
+    await soloRun(
+      `solo deployment add-cluster --deployment ${deployment} --cluster-ref kind-${clusterName} --num-consensus-nodes ${numNodes} --dev`,
+    );
   }
 }
 
@@ -145,30 +103,13 @@ async function generateNodeKeys(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "keys",
-      "consensus",
-      "generate",
-      "--gossip-keys",
-      "--tls-keys",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo keys consensus generate --gossip-keys --tls-keys -i ${nodeIds} --deployment ${deployment} --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "node",
-      "keys",
-      "--gossip-keys",
-      "--tls-keys",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo node keys --gossip-keys --tls-keys -i ${nodeIds} --deployment ${deployment} --dev`,
+    );
   }
 }
 
@@ -180,22 +121,9 @@ async function setupSoloCluster(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "cluster-ref",
-      "config",
-      "setup",
-      "-s",
-      clusterName,
-      "--dev",
-    ]);
+    await soloRun(`solo cluster-ref config setup -s ${clusterName} --dev`);
   } else {
-    await safeExec("solo", [
-      "cluster-ref",
-      "setup",
-      "-s",
-      clusterName,
-      "--dev",
-    ]);
+    await soloRun(`solo cluster-ref setup -s ${clusterName} --dev`);
   }
 }
 
@@ -209,30 +137,13 @@ async function deployNetwork(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "consensus",
-      "network",
-      "deploy",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--release-tag",
-      hieroVersion,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo consensus network deploy -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "network",
-      "deploy",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--release-tag",
-      hieroVersion,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo network deploy -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --dev`,
+    );
   }
 }
 
@@ -246,32 +157,13 @@ async function setupNode(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "consensus",
-      "node",
-      "setup",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--release-tag",
-      hieroVersion,
-      "--quiet-mode",
-      "--dev",
-    ]);
+    await soloRun(
+      `solo consensus node setup -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --quiet-mode --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "node",
-      "setup",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--release-tag",
-      hieroVersion,
-      "--quiet-mode",
-      "--dev",
-    ]);
+    await soloRun(
+      `solo node setup -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --quiet-mode --dev`,
+    );
   }
 }
 
@@ -284,26 +176,13 @@ async function startNode(
   soloGe0440: boolean,
 ): Promise<void> {
   if (soloGe0440) {
-    await safeExec("solo", [
-      "consensus",
-      "node",
-      "start",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo consensus node start -i ${nodeIds} --deployment ${deployment} --dev`,
+    );
   } else {
-    await safeExec("solo", [
-      "node",
-      "start",
-      "-i",
-      nodeIds,
-      "--deployment",
-      deployment,
-      "--dev",
-    ]);
+    await soloRun(
+      `solo node start -i ${nodeIds} --deployment ${deployment} --dev`,
+    );
   }
 }
 
@@ -320,7 +199,7 @@ async function setupHostsEntries(
 ): Promise<void> {
   try {
     // Check if we have sudo access
-    const sudoCheck = await safeExec("sudo", ["-n", "true"], {
+    const sudoCheck = await runCommand("sudo -n true", {
       ignoreReturnCode: true,
     });
 
@@ -338,10 +217,7 @@ async function setupHostsEntries(
       }
 
       for (const entry of entries) {
-        await safeExec("bash", [
-          "-c",
-          `echo "${entry}" | sudo tee -a /etc/hosts`,
-        ]);
+        await runCommand(`bash -c 'echo "${entry}" | sudo tee -a /etc/hosts'`);
       }
       safeInfo("Successfully added entries to /etc/hosts");
     } else {
@@ -404,7 +280,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
 
     // Debug: List services in the solo namespace
     safeInfo(`Listing services in namespace ${namespace}:`);
-    await safeExec("kubectl", ["get", "svc", "-n", namespace]);
+    await runCommand(`kubectl get svc -n ${namespace}`);
 
     // Add /etc/hosts entries
     await setupHostsEntries(namespace, dualMode);
@@ -468,46 +344,25 @@ async function deployMirrorNode(soloGe0440: boolean): Promise<void> {
   const enableIngress = installRelay;
 
   try {
-    const baseArgs: string[] = [];
+    let baseArgs = "";
 
     if (soloGe0440) {
-      baseArgs.push(
-        "mirror",
-        "node",
-        "add",
-        "--cluster-ref",
-        `kind-${clusterName}`,
-        "--deployment",
-        deployment,
-        "--mirror-node-version",
-        version,
-        "--pinger",
-      );
+      baseArgs = `solo mirror node add --cluster-ref kind-${clusterName} --deployment ${deployment} --mirror-node-version ${version} --pinger`;
     } else {
-      baseArgs.push(
-        "mirror-node",
-        "deploy",
-        "--cluster-ref",
-        `kind-${clusterName}`,
-        "--deployment",
-        deployment,
-        "--mirror-node-version",
-        version,
-        "--pinger",
-      );
+      baseArgs = `solo mirror-node deploy --cluster-ref kind-${clusterName} --deployment ${deployment} --mirror-node-version ${version} --pinger`;
     }
 
     if (enableIngress) {
-      baseArgs.push("--enable-ingress");
+      baseArgs += " --enable-ingress";
     }
 
-    baseArgs.push("--dev");
+    baseArgs += " --dev";
 
-    await safeExec("solo", baseArgs);
+    await soloRun(baseArgs);
 
     // Debug: List services in the solo namespace
     safeInfo(`Listing services in namespace ${namespace}:`);
-    await safeExec("kubectl", ["get", "svc", "-n", namespace]);
+    await runCommand(`kubectl get svc -n ${namespace}`);
 
     // Port forward Mirror Node services
     await portForwardIfExists("mirror-1-rest", `${portRest}:80`, namespace);
@@ -536,44 +391,27 @@ async function deployRelay(soloGe0440: boolean): Promise<void> {
   const relayPort = safeGetInput("relayPort") || "7546";
 
   try {
-    const baseArgs: string[] = [];
+    let baseArgs = "";
 
     if (soloGe0440) {
-      baseArgs.push(
-        "relay",
-        "node",
-        "add",
-        "-i",
-        "node1",
-        "--deployment",
-        deployment,
-        "--dev",
-      );
+      baseArgs = `solo relay node add -i node1 --deployment ${deployment} --dev`;
     } else {
-      baseArgs.push(
-        "relay",
-        "deploy",
-        "-i",
-        "node1",
-        "--deployment",
-        deployment,
-        "--dev",
-      );
+      baseArgs = `solo relay deploy -i node1 --deployment ${deployment} --dev`;
     }
 
     // Add --values-file if relay-low-resources.yaml exists
     const workspacePath = process.env.GITHUB_WORKSPACE || ".";
     const relayValuesFile = join(workspacePath, "relay-low-resources.yaml");
     if (existsSync(relayValuesFile)) {
-      baseArgs.push("--values-file", relayValuesFile);
+      baseArgs += ` --values-file ${relayValuesFile}`;
     }
 
-    await safeExec("solo", baseArgs);
+    await soloRun(baseArgs);
     safeInfo("JSON-RPC-Relay installed successfully");
 
     // Debug: List services in the solo namespace
     safeInfo(`Listing services in namespace ${namespace}:`);
-    await safeExec("kubectl", ["get", "svc", "-n", namespace]);
+    await runCommand(`kubectl get svc -n ${namespace}`);
 
     // Port forward the Relay service
     await portForwardIfExists(
@@ -603,22 +441,22 @@ async function createAccount(
 
   try {
     // Build the create command
-    const createArgs: string[] = [];
+    let createArgs = "";
     if (soloGe0440) {
-      createArgs.push("ledger", "account", "create");
+      createArgs = "solo ledger account create";
     } else {
-      createArgs.push("account", "create");
+      createArgs = "solo account create";
     }
 
     if (type === "ecdsa") {
-      createArgs.push("--generate-ecdsa-key");
+      createArgs += " --generate-ecdsa-key";
     }
 
-    createArgs.push("--deployment", deployment, "--dev");
+    createArgs += ` --deployment ${deployment} --dev`;
 
     // Execute and redirect output to file
-    const createCommand = `solo ${createArgs.join(" ")} > ${outputFile}`;
-    await safeExec("bash", ["-c", createCommand]);
+    const createCommand = `${createArgs} > ${outputFile}`;
+    await runCommand(`bash -c '${createCommand}'`);
 
     // Read and parse the output
     const content = safeReadFileSync(outputFile);
@@ -634,7 +472,7 @@ async function createAccount(
     // Get the private key from the Kubernetes secret
     const privateKeyCmd = `kubectl get secret account-key-${accountId} -n ${namespace} -o jsonpath='{.data.privateKey}' | base64 -d | xargs`;
     let privateKey = "";
-    await safeExec("bash", ["-c", privateKeyCmd], {
+    await runCommand(`bash -c "${privateKeyCmd}"`, {
       listeners: {
         stdout: (data: Buffer) => {
           privateKey += data.toString();
@@ -643,22 +481,14 @@ async function createAccount(
     });
 
     // Update the account with the specified hbar amount
-    const updateArgs: string[] = [];
+    let updateArgs = "";
     if (soloGe0440) {
-      updateArgs.push("ledger", "account", "update");
+      updateArgs = "solo ledger account update";
     } else {
-      updateArgs.push("account", "update");
+      updateArgs = "solo account update";
     }
-    updateArgs.push(
-      "--account-id",
-      accountId,
-      "--hbar-amount",
-      hbarAmount,
-      "--deployment",
-      deployment,
-      "--dev",
-    );
-    await safeExec("solo", updateArgs);
+    updateArgs += ` --account-id ${accountId} --hbar-amount ${hbarAmount} --deployment ${deployment} --dev`;
+    await soloRun(updateArgs);
 
     safeInfo(`accountId=${accountId}`);
     safeInfo(`publicKey=${publicKey}`);

@@ -81,6 +81,46 @@ export async function safeExec(
 }
 
 /**
+ * Executes a command string by breaking it down into command and arguments, then calls safeExec.
+ * Supports basic quoted strings for arguments.
+ * @param commandStr - The full command string (e.g. "kubectl get svc -n solo")
+ * @param options - Optional execution options
+ */
+export async function runCommand(
+  commandStr: string,
+  options?: Parameters<typeof exec>[2],
+): Promise<number> {
+  const matches = commandStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+  if (matches.length === 0) return 0;
+
+  const command = matches[0] as string;
+  const args = matches.slice(1).map((arg) => {
+    // Strip surrounding quotes if present
+    if (
+      (arg.startsWith('"') && arg.endsWith('"')) ||
+      (arg.startsWith("'") && arg.endsWith("'"))
+    ) {
+      return arg.slice(1, -1);
+    }
+    return arg;
+  });
+
+  return safeExec(command, args, options);
+}
+
+/**
+ * Executes a Solo CLI command safely using runCommand
+ * @param commandStr - The full command string (e.g. "solo init --dev")
+ * @param options - Optional execution options
+ */
+export async function soloRun(
+  commandStr: string,
+  options?: Parameters<typeof exec>[2],
+): Promise<number> {
+  return runCommand(commandStr, options);
+}
+
+/**
  * Port forwards a service if it exists
  * This port forwards a service if it exists in the namespace
  * @param service - The name of the service to port forward
@@ -94,13 +134,9 @@ export async function portForwardIfExists(
 ): Promise<void> {
   try {
     // Check if service exists first
-    const exitCode = await safeExec("kubectl", [
-      "get",
-      "svc",
-      service,
-      "-n",
-      namespace,
-    ]);
+    const exitCode = await runCommand(
+      `kubectl get svc ${service} -n ${namespace}`,
+    );
 
     if (exitCode === 0) {
       safeInfo(`Service ${service} exists`);

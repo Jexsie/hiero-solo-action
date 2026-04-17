@@ -8,7 +8,7 @@ import {
 } from "@actions/tool-cache";
 import { readdirSync } from "fs";
 import { join } from "path";
-import { safeInfo, safeExec, isVersionGte } from "./utils.js";
+import { safeInfo, runCommand, safeExec, isVersionGte } from "./utils.js";
 import {
   PYTHON_VERSION,
   PYTHON_DOWNLOAD_URL,
@@ -53,7 +53,7 @@ export async function setupDependencies(): Promise<void> {
     if (!wgetPath) {
       safeInfo("Installing wget via static binary...");
       const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
-      await safeExec("chmod", ["+x", downloadedWget]);
+      await runCommand(`chmod +x ${downloadedWget}`);
       const cachedWget = await cacheFile(
         downloadedWget,
         "wget",
@@ -95,7 +95,7 @@ export async function setupDependencies(): Promise<void> {
     if (!kindPath) {
       safeInfo(`Downloading Kind ${KIND_VERSION}...`);
       const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
-      await safeExec("chmod", ["+x", downloadedKind]);
+      await runCommand(`chmod +x ${downloadedKind}`);
       const cachedKind = await cacheFile(
         downloadedKind,
         "kind",
@@ -110,7 +110,7 @@ export async function setupDependencies(): Promise<void> {
     if (!kubectlPath) {
       safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
       const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
-      await safeExec("chmod", ["+x", downloadedKubectl]);
+      await runCommand(`chmod +x ${downloadedKubectl}`);
       const cachedKubectl = await cacheFile(
         downloadedKubectl,
         "kubectl",
@@ -123,7 +123,7 @@ export async function setupDependencies(): Promise<void> {
     // Install Solo CLI
     const soloVersion = getInput("soloVersion") || "latest";
     safeInfo(`Installing Solo CLI version: ${soloVersion}`);
-    await safeExec(`npm install -g @hashgraph/solo@${soloVersion}`);
+    await runCommand(`npm install -g @hashgraph/solo@${soloVersion}`);
 
     safeInfo("✅ All dependencies installed successfully.");
   } catch (error) {
