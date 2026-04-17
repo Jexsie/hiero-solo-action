@@ -7,8 +7,8 @@ import {
   addPath,
   endGroup,
 } from "@actions/core";
-import { downloadTool, cacheFile } from "@actions/tool-cache";
-import { existsSync } from "fs";
+import { downloadTool, cacheFile, extractTar, cacheDir } from "@actions/tool-cache";
+import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import {
   safeInfo,
@@ -82,18 +82,71 @@ async function setupDependencies(): Promise<void> {
   startGroup("Installing System Dependencies");
 
   try {
-    // Install wget & Python (Standard OS packages)
-    safeInfo(
-      "Updating apt and installing wget, Python, Java 21, Kind, and kubectl",
-    );
-    await safeExec("sudo apt-get update");
-    await safeExec("sudo apt-get install -y wget python3.10");
+    // Setup Python 3
+    const pythonPath =
+      (await which("python3", false)) || (await which("python", false));
+    if (!pythonPath) {
+      safeInfo("Installing Python 3.12 via python-build-standalone...");
+      const pythonVersion = "3.12.9";
+      const releaseTag = "20250409";
+      const pythonUrl =
+        `https://github.com/astral-sh/python-build-standalone/releases/download/${releaseTag}/cpython-${pythonVersion}%2B${releaseTag}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
+      const downloadedPython = await downloadTool(pythonUrl);
+      const extractedPythonDir = await extractTar(downloadedPython);
+      const cachedPython = await cacheDir(
+        join(extractedPythonDir, "python"),
+        "python",
+        pythonVersion,
+      );
+      addPath(join(cachedPython, "bin"));
+      safeInfo("Python installed successfully.");
+    } else {
+      safeInfo(`Python is already installed at ${pythonPath}.`);
+    }
 
-    // Setup Java 21 (Temurin)
+    // Setup wget
+    const wgetPath = await which("wget", false);
+    if (!wgetPath) {
+      safeInfo("Installing wget via static binary...");
+      const wgetVersion = "1.25.0";
+      const wgetUrl =
+        `https://github.com/userdocs/qbt-workflow-files/releases/latest/download/wget`;
+      const downloadedWget = await downloadTool(wgetUrl);
+      await safeExec("chmod", ["+x", downloadedWget]);
+      const cachedWget = await cacheFile(
+        downloadedWget,
+        "wget",
+        "wget",
+        wgetVersion,
+      );
+      addPath(cachedWget);
+      safeInfo("wget installed successfully.");
+    } else {
+      safeInfo(`wget is already installed at ${wgetPath}.`);
+    }
+
+    // Setup Java 21 (Adoptium Temurin)
     const javaPath = await which("java", false);
     if (!javaPath) {
-      safeInfo("Installing OpenJDK 21...");
-      await safeExec("sudo apt-get install -y openjdk-21-jdk");
+      safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
+      const javaVersion = "21";
+      // Adoptium API redirect — always points to the latest JDK 21 GA release
+      const javaUrl =
+        "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk";
+      const downloadedJava = await downloadTool(javaUrl);
+      const extractedJavaDir = await extractTar(downloadedJava);
+
+      // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
+      const dirContents = readdirSync(extractedJavaDir);
+      const jdkDir =
+        dirContents.find((name) => name.startsWith("jdk-")) || dirContents[0];
+      const javaHomePath = join(extractedJavaDir, jdkDir);
+
+      const cachedJava = await cacheDir(javaHomePath, "java", javaVersion);
+      addPath(join(cachedJava, "bin"));
+      safeInfo(`Java installed at ${cachedJava}.`);
+    } else {
+      safeInfo(`Java is already installed at ${javaPath}.`);
     }
 
     // Setup Kind
@@ -115,21 +168,25 @@ async function setupDependencies(): Promise<void> {
 
     // Setup kubectl
     const k8sVersion = "v1.32.2";
-    const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
-    const downloadedKubectl = await downloadTool(kubectlUrl);
-    await safeExec("chmod", ["+x", downloadedKubectl]);
-    const cachedKubectl = await cacheFile(
-      downloadedKubectl,
-      "kubectl",
-      "kubectl",
-      k8sVersion,
-    );
-    addPath(cachedKubectl);
+    const kubectlPath = await which("kubectl", false);
+    if (!kubectlPath) {
+      safeInfo(`Downloading kubectl ${k8sVersion}...`);
+      const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
+      const downloadedKubectl = await downloadTool(kubectlUrl);
+      await safeExec("chmod", ["+x", downloadedKubectl]);
+      const cachedKubectl = await cacheFile(
+        downloadedKubectl,
+        "kubectl",
+        "kubectl",
+        k8sVersion,
+      );
+      addPath(cachedKubectl);
+    }
 
     // Install Solo CLI
     const soloVersion = getInput("soloVersion") || "latest";
     safeInfo(`Installing Solo CLI version: ${soloVersion}`);
-    await safeExec(`sudo npm install -g @hashgraph/solo@${soloVersion}`);
+    await safeExec(`npm install -g @hashgraph/solo@${soloVersion}`);
 
     safeInfo("✅ All dependencies installed successfully.");
   } catch (error) {
