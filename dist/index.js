@@ -34029,9 +34029,9 @@ function extractTar(file_1, dest_1) {
         // Create dest
         dest = yield _createExtractFolder(dest);
         // Determine whether GNU tar
-        core.debug('Checking tar --version');
+        core_debug('Checking tar --version');
         let versionOutput = '';
-        yield exec('tar --version', [], {
+        yield exec_exec('tar --version', [], {
             ignoreReturnCode: true,
             silent: true,
             listeners: {
@@ -34039,7 +34039,7 @@ function extractTar(file_1, dest_1) {
                 stderr: (data) => (versionOutput += data.toString())
             }
         });
-        core.debug(versionOutput.trim());
+        core_debug(versionOutput.trim());
         const isGnuTar = versionOutput.toUpperCase().includes('GNU TAR');
         // Initialize args
         let args;
@@ -34049,7 +34049,7 @@ function extractTar(file_1, dest_1) {
         else {
             args = [flags];
         }
-        if (core.isDebug() && !flags.includes('v')) {
+        if (isDebug() && !flags.includes('v')) {
             args.push('-v');
         }
         let destArg = dest;
@@ -34067,7 +34067,7 @@ function extractTar(file_1, dest_1) {
             args.push('--overwrite');
         }
         args.push('-C', destArg, '-f', fileArg);
-        yield exec(`tar`, args);
+        yield exec_exec(`tar`, args);
         return dest;
     });
 }
@@ -34194,20 +34194,20 @@ function extractZipNix(file, dest) {
  */
 function cacheDir(sourceDir, tool, version, arch) {
     return tool_cache_awaiter(this, void 0, void 0, function* () {
-        version = semver.clean(version) || version;
-        arch = arch || os.arch();
-        core.debug(`Caching tool ${tool} ${version} ${arch}`);
-        core.debug(`source dir: ${sourceDir}`);
-        if (!fs.statSync(sourceDir).isDirectory()) {
+        version = node_modules_semver.clean(version) || version;
+        arch = arch || external_os_namespaceObject.arch();
+        core_debug(`Caching tool ${tool} ${version} ${arch}`);
+        core_debug(`source dir: ${sourceDir}`);
+        if (!external_fs_namespaceObject.statSync(sourceDir).isDirectory()) {
             throw new Error('sourceDir is not a directory');
         }
         // Create the tool dir
         const destPath = yield _createToolPath(tool, version, arch);
         // copy each child item. do not move. move can fail on Windows
         // due to anti-virus software having an open handle on a file.
-        for (const itemName of fs.readdirSync(sourceDir)) {
-            const s = path.join(sourceDir, itemName);
-            yield io.cp(s, destPath, { recursive: true });
+        for (const itemName of external_fs_namespaceObject.readdirSync(sourceDir)) {
+            const s = external_path_namespaceObject.join(sourceDir, itemName);
+            yield io_cp(s, destPath, { recursive: true });
         }
         // write .complete
         _completeToolPath(tool, version, arch);
@@ -34352,9 +34352,9 @@ function _createExtractFolder(dest) {
     return tool_cache_awaiter(this, void 0, void 0, function* () {
         if (!dest) {
             // create a temp dir
-            dest = path.join(_getTempDirectory(), crypto.randomUUID());
+            dest = external_path_namespaceObject.join(_getTempDirectory(), external_crypto_namespaceObject.randomUUID());
         }
-        yield io.mkdirP(dest);
+        yield mkdirP(dest);
         return dest;
     });
 }
@@ -34643,15 +34643,56 @@ async function checkSoloVersion() {
 async function setupDependencies() {
     startGroup("Installing System Dependencies");
     try {
-        // Install wget & Python (Standard OS packages)
-        safeInfo("Updating apt and installing wget, Python, Java 21, Kind, and kubectl");
-        await safeExec("sudo apt-get update");
-        await safeExec("sudo apt-get install -y wget python3.10");
-        // Setup Java 21 (Temurin)
+        // Setup Python 3
+        const pythonPath = (await which("python3", false)) || (await which("python", false));
+        if (!pythonPath) {
+            safeInfo("Installing Python 3.12 via python-build-standalone...");
+            const pythonVersion = "3.12.9";
+            const releaseTag = "20250409";
+            const pythonUrl = `https://github.com/astral-sh/python-build-standalone/releases/download/${releaseTag}/cpython-${pythonVersion}%2B${releaseTag}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
+            const downloadedPython = await downloadTool(pythonUrl);
+            const extractedPythonDir = await extractTar(downloadedPython);
+            const cachedPython = await cacheDir((0,external_path_namespaceObject.join)(extractedPythonDir, "python"), "python", pythonVersion);
+            addPath((0,external_path_namespaceObject.join)(cachedPython, "bin"));
+            safeInfo("Python installed successfully.");
+        }
+        else {
+            safeInfo(`Python is already installed at ${pythonPath}.`);
+        }
+        // Setup wget
+        const wgetPath = await which("wget", false);
+        if (!wgetPath) {
+            safeInfo("Installing wget via static binary...");
+            const wgetVersion = "1.25.0";
+            const wgetUrl = `https://github.com/userdocs/qbt-workflow-files/releases/latest/download/wget`;
+            const downloadedWget = await downloadTool(wgetUrl);
+            await safeExec("chmod", ["+x", downloadedWget]);
+            const cachedWget = await cacheFile(downloadedWget, "wget", "wget", wgetVersion);
+            addPath(cachedWget);
+            safeInfo("wget installed successfully.");
+        }
+        else {
+            safeInfo(`wget is already installed at ${wgetPath}.`);
+        }
+        // Setup Java 21 (Adoptium Temurin)
         const javaPath = await which("java", false);
         if (!javaPath) {
-            safeInfo("Installing OpenJDK 21...");
-            await safeExec("sudo apt-get install -y openjdk-21-jdk");
+            safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
+            const javaVersion = "21";
+            // Adoptium API redirect — always points to the latest JDK 21 GA release
+            const javaUrl = "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk";
+            const downloadedJava = await downloadTool(javaUrl);
+            const extractedJavaDir = await extractTar(downloadedJava);
+            // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
+            const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
+            const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) || dirContents[0];
+            const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
+            const cachedJava = await cacheDir(javaHomePath, "java", javaVersion);
+            addPath((0,external_path_namespaceObject.join)(cachedJava, "bin"));
+            safeInfo(`Java installed at ${cachedJava}.`);
+        }
+        else {
+            safeInfo(`Java is already installed at ${javaPath}.`);
         }
         // Setup Kind
         const kindVersion = "v0.29.0";
@@ -34666,15 +34707,19 @@ async function setupDependencies() {
         }
         // Setup kubectl
         const k8sVersion = "v1.32.2";
-        const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
-        const downloadedKubectl = await downloadTool(kubectlUrl);
-        await safeExec("chmod", ["+x", downloadedKubectl]);
-        const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", k8sVersion);
-        addPath(cachedKubectl);
+        const kubectlPath = await which("kubectl", false);
+        if (!kubectlPath) {
+            safeInfo(`Downloading kubectl ${k8sVersion}...`);
+            const kubectlUrl = `https://dl.k8s.io/release/${k8sVersion}/bin/linux/amd64/kubectl`;
+            const downloadedKubectl = await downloadTool(kubectlUrl);
+            await safeExec("chmod", ["+x", downloadedKubectl]);
+            const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", k8sVersion);
+            addPath(cachedKubectl);
+        }
         // Install Solo CLI
         const soloVersion = getInput("soloVersion") || "latest";
         safeInfo(`Installing Solo CLI version: ${soloVersion}`);
-        await safeExec(`sudo npm install -g @hashgraph/solo@${soloVersion}`);
+        await safeExec(`npm install -g @hashgraph/solo@${soloVersion}`);
         safeInfo("✅ All dependencies installed successfully.");
     }
     catch (error) {
