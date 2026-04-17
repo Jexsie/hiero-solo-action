@@ -34625,30 +34625,13 @@ async function checkSoloVersion() {
         });
         const combined = `${stdout}\n${stderr}`.trim();
         safeInfo(`[checkSoloVersion] raw output: ${combined}`);
-        let version;
-        // Pattern 1: oclif format "@hashgraph/solo/X.Y.Z" or "solo/X.Y.Z"
-        const oclif = combined.match(/solo\/(\d+\.\d+\.\d+)/i);
-        if (oclif) {
-            version = oclif[1];
-        }
-        // Pattern 2: "Version X.Y.Z"
-        if (!version) {
-            const banner = combined.match(/Version\s+(\d+\.\d+\.\d+)/i);
-            if (banner) {
-                version = banner[1];
-            }
-        }
-        // Pattern 3: bare semver anywhere in the output
-        if (!version) {
-            const bare = combined.match(/(\d+\.\d+\.\d+)/);
-            if (bare) {
-                version = bare[1];
-            }
-        }
-        if (!version) {
+        // Match "Version<whitespace>:<whitespace>X.Y.Z" from the Solo banner
+        const match = combined.match(/Version\s*:\s*(\d+\.\d+\.\d+)/);
+        if (!match) {
             safeInfo(`[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.`);
             return true;
         }
+        const version = match[1];
         const ge0440 = isVersionGte(version, "0.44.0");
         safeInfo(`[checkSoloVersion] version=${version}, >= 0.44.0: ${ge0440}`);
         return ge0440;
