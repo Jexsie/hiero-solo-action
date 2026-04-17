@@ -26,9 +26,6 @@ importers:
       child_process:
         specifier: ^1.0.2
         version: 1.0.2
-      fs:
-        specifier: ^0.0.1-security
-        version: 0.0.1-security
     devDependencies:
       '@types/node':
         specifier: ^24.0.13
@@ -82,9 +79,6 @@ packages:
 
   child_process@1.0.2:
     resolution: {integrity: sha512-Wmza/JzL0SiWz7kl6MhIKT5ceIlnFPJX+lwUGj7Clhy5MMldsSoJR0+uvRzOS5Kv45Mq7t1PoE8TsOA9bzvb6g==}
-
-  fs@0.0.1-security:
-    resolution: {integrity: sha512-3XY9e1pP0CVEUCdj5BmfIZxRBTSDycnbqhIOGec9QYtmVH2fbLpj86CFWkrNOkt/Fvty4KZG5lTglL9j/gJ87w==}
 
   husky@9.1.7:
     resolution: {integrity: sha512-5gs5ytaNjBrh5Ow3zrvdUUY+0VxIuWVL4i9irt6friV+BqdCfmV11CQTWMiBYWHbXhco+J1kHfTOUkePhCDvMA==}
@@ -167,8 +161,6 @@ snapshots:
   '@vercel/ncc@0.38.4': {}
 
   child_process@1.0.2: {}
-
-  fs@0.0.1-security: {}
 
   husky@9.1.7: {}
 
