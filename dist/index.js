@@ -34628,6 +34628,8 @@ const KIND_VERSION = "v0.29.0";
 const KIND_DOWNLOAD_URL = `https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`;
 const KUBECTL_VERSION = "v1.32.2";
 const KUBECTL_DOWNLOAD_URL = `https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`;
+const NODE_VERSION = "24.0.1";
+const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
 
 ;// CONCATENATED MODULE: ./src/setup.ts
 
@@ -34705,6 +34707,21 @@ async function setupDependencies() {
             await runCommand(`chmod +x ${downloadedKubectl}`);
             const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
             addPath(cachedKubectl);
+        }
+        // Setup Node.js / npm
+        const npmPath = await which("npm", false);
+        if (!npmPath) {
+            safeInfo("Installing Node.js (includes npm) via official tarball...");
+            const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
+            const extractedNodeDir = await extractTar(downloadedNode, undefined, ["xJ"]);
+            const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
+            const nodeHomePath = (0,external_path_namespaceObject.join)(extractedNodeDir, nodeDir);
+            const cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
+            addPath((0,external_path_namespaceObject.join)(cachedNode, "bin"));
+            safeInfo("Node.js and npm installed successfully.");
+        }
+        else {
+            safeInfo(`npm is already installed at ${npmPath}.`);
         }
         // Install Solo CLI
         const soloVersion = getInput("soloVersion") || "latest";

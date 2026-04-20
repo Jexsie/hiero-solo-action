@@ -20,6 +20,8 @@ import {
     KIND_DOWNLOAD_URL,
     KUBECTL_VERSION,
     KUBECTL_DOWNLOAD_URL,
+    NODE_VERSION,
+    NODE_DOWNLOAD_URL,
 } from "./constants.js";
 
 /**
@@ -119,6 +121,33 @@ export async function setupDependencies(): Promise<void> {
                 KUBECTL_VERSION,
             );
             addPath(cachedKubectl);
+        }
+
+        // Setup Node.js / npm
+        const npmPath = await which("npm", false);
+        if (!npmPath) {
+            safeInfo(
+                "Installing Node.js (includes npm) via official tarball...",
+            );
+            const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
+            const extractedNodeDir = await extractTar(
+                downloadedNode,
+                undefined,
+                ["xJ"],
+            );
+
+            const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
+            const nodeHomePath = join(extractedNodeDir, nodeDir);
+
+            const cachedNode = await cacheDir(
+                nodeHomePath,
+                "node",
+                NODE_VERSION,
+            );
+            addPath(join(cachedNode, "bin"));
+            safeInfo("Node.js and npm installed successfully.");
+        } else {
+            safeInfo(`npm is already installed at ${npmPath}.`);
         }
 
         // Install Solo CLI
