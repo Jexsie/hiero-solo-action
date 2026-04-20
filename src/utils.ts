@@ -9,14 +9,14 @@ import { readFileSync } from "fs";
  * @returns The account information as a JSON string
  */
 export function extractAccountAsJson(inputText: string): string {
-  const jsonRegex =
-    /\{\s*"accountId":\s*".*?",\s*"publicKey":\s*".*?",\s*"balance":\s*\d+\s*\}/s;
-  const match = inputText.match(jsonRegex);
-  if (match) {
-    return match[0];
-  } else {
-    throw new Error("No JSON block found in output");
-  }
+    const jsonRegex =
+        /\{\s*"accountId":\s*".*?",\s*"publicKey":\s*".*?",\s*"balance":\s*\d+\s*\}/s;
+    const match = inputText.match(jsonRegex);
+    if (match) {
+        return match[0];
+    } else {
+        throw new Error("No JSON block found in output");
+    }
 }
 
 /**
@@ -25,11 +25,11 @@ export function extractAccountAsJson(inputText: string): string {
  * @returns The input value or empty string if not found
  */
 export function safeGetInput(name: string): string {
-  try {
-    return getInput(name) ?? "";
-  } catch {
-    return "";
-  }
+    try {
+        return getInput(name) ?? "";
+    } catch {
+        return "";
+    }
 }
 
 /**
@@ -38,12 +38,13 @@ export function safeGetInput(name: string): string {
  * @param value - The value to set
  */
 export function safeSetOutput(name: string, value: string): void {
-  try {
-    setOutput(name, value);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    info(`Failed to set output ${name}: ${errorMessage}`);
-  }
+    try {
+        setOutput(name, value);
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        info(`Failed to set output ${name}: ${errorMessage}`);
+    }
 }
 
 /**
@@ -51,11 +52,11 @@ export function safeSetOutput(name: string, value: string): void {
  * @param message - The message to log
  */
 export function safeInfo(message: string): void {
-  try {
-    info(message);
-  } catch (error) {
-    console.log(message); // Fallback to console.log if info fails
-  }
+    try {
+        info(message);
+    } catch {
+        console.log(message); // Fallback to console.log if info fails
+    }
 }
 
 /**
@@ -65,19 +66,21 @@ export function safeInfo(message: string): void {
  * @param options - Optional execution options
  */
 export async function safeExec(
-  command: string,
-  args?: string[],
-  options?: Parameters<typeof exec>[2],
+    command: string,
+    args?: string[],
+    options?: Parameters<typeof exec>[2],
 ): Promise<number> {
-  try {
-    const result = await exec(command, args, options);
-    return typeof result === "number" ? result : 0;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`,
-    );
-  }
+    try {
+        const result = await exec(command, args, options);
+        return typeof result === "number" ? result : 0;
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`,
+            { cause: error },
+        );
+    }
 }
 
 /**
@@ -87,25 +90,25 @@ export async function safeExec(
  * @param options - Optional execution options
  */
 export async function runCommand(
-  commandStr: string,
-  options?: Parameters<typeof exec>[2],
+    commandStr: string,
+    options?: Parameters<typeof exec>[2],
 ): Promise<number> {
-  const matches = commandStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-  if (matches.length === 0) return 0;
+    const matches = commandStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    if (matches.length === 0) return 0;
 
-  const command = matches[0] as string;
-  const args = matches.slice(1).map((arg) => {
-    // Strip surrounding quotes if present
-    if (
-      (arg.startsWith('"') && arg.endsWith('"')) ||
-      (arg.startsWith("'") && arg.endsWith("'"))
-    ) {
-      return arg.slice(1, -1);
-    }
-    return arg;
-  });
+    const command = matches[0] as string;
+    const args = matches.slice(1).map((arg) => {
+        // Strip surrounding quotes if present
+        if (
+            (arg.startsWith('"') && arg.endsWith('"')) ||
+            (arg.startsWith("'") && arg.endsWith("'"))
+        ) {
+            return arg.slice(1, -1);
+        }
+        return arg;
+    });
 
-  return safeExec(command, args, options);
+    return safeExec(command, args, options);
 }
 
 /**
@@ -114,10 +117,10 @@ export async function runCommand(
  * @param options - Optional execution options
  */
 export async function soloRun(
-  commandStr: string,
-  options?: Parameters<typeof exec>[2],
+    commandStr: string,
+    options?: Parameters<typeof exec>[2],
 ): Promise<number> {
-  return runCommand(commandStr, options);
+    return runCommand(commandStr, options);
 }
 
 /**
@@ -128,42 +131,45 @@ export async function soloRun(
  * @param namespace - The namespace to port forward the service from
  */
 export async function portForwardIfExists(
-  service: string,
-  portSpec: string,
-  namespace: string,
+    service: string,
+    portSpec: string,
+    namespace: string,
 ): Promise<void> {
-  try {
-    // Check if service exists first
-    const exitCode = await runCommand(
-      `kubectl get svc ${service} -n ${namespace}`,
-    );
+    try {
+        // Check if service exists first
+        const exitCode = await runCommand(
+            `kubectl get svc ${service} -n ${namespace}`,
+        );
 
-    if (exitCode === 0) {
-      safeInfo(`Service ${service} exists`);
+        if (exitCode === 0) {
+            safeInfo(`Service ${service} exists`);
 
-      const portForwardProcess = spawn(
-        "kubectl",
-        ["port-forward", `svc/${service}`, "-n", namespace, portSpec],
-        {
-          detached: true,
-          stdio: "ignore",
-        },
-      );
+            const portForwardProcess = spawn(
+                "kubectl",
+                ["port-forward", `svc/${service}`, "-n", namespace, portSpec],
+                {
+                    detached: true,
+                    stdio: "ignore",
+                },
+            );
 
-      // Handle process errors
-      portForwardProcess.on("error", (error) => {
-        safeInfo(`Port-forward process error for ${service}: ${error.message}`);
-      });
+            // Handle process errors
+            portForwardProcess.on("error", (error) => {
+                safeInfo(
+                    `Port-forward process error for ${service}: ${error.message}`,
+                );
+            });
 
-      portForwardProcess.unref();
-      safeInfo(`Port-forward started for ${service} on ${portSpec}`);
+            portForwardProcess.unref();
+            safeInfo(`Port-forward started for ${service} on ${portSpec}`);
+        }
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        safeInfo(
+            `Service ${service} not found or error occurred: ${errorMessage}, skipping port-forward`,
+        );
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    safeInfo(
-      `Service ${service} not found or error occurred: ${errorMessage}, skipping port-forward`,
-    );
-  }
 }
 
 /**
@@ -172,12 +178,15 @@ export async function portForwardIfExists(
  * @returns The file content as string
  */
 export function safeReadFileSync(filePath: string): string {
-  try {
-    return readFileSync(filePath, "utf-8");
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to read file ${filePath}: ${errorMessage}`);
-  }
+    try {
+        return readFileSync(filePath, "utf-8");
+    } catch (error) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`, {
+            cause: error,
+        });
+    }
 }
 
 /**
@@ -185,11 +194,11 @@ export function safeReadFileSync(filePath: string): string {
  * Returns true if `version` >= `target`.
  */
 export function isVersionGte(version: string, target: string): boolean {
-  const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
-  const [aMajor = 0, aMinor = 0, aPatch = 0] = parse(version);
-  const [bMajor = 0, bMinor = 0, bPatch = 0] = parse(target);
+    const parse = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+    const [aMajor = 0, aMinor = 0, aPatch = 0] = parse(version);
+    const [bMajor = 0, bMinor = 0, bPatch = 0] = parse(target);
 
-  if (aMajor !== bMajor) return aMajor > bMajor;
-  if (aMinor !== bMinor) return aMinor > bMinor;
-  return aPatch >= bPatch;
+    if (aMajor !== bMajor) return aMajor > bMajor;
+    if (aMinor !== bMinor) return aMinor > bMinor;
+    return aPatch >= bPatch;
 }
