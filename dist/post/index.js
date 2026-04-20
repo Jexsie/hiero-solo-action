@@ -30976,7 +30976,7 @@ function safeInfo(message) {
     try {
         core_info(message);
     }
-    catch (error) {
+    catch {
         console.log(message); // Fallback to console.log if info fails
     }
 }
@@ -30993,7 +30993,7 @@ async function safeExec(command, args, options) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`);
+        throw new Error(`Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`, { cause: error });
     }
 }
 /**
@@ -31066,7 +31066,9 @@ function safeReadFileSync(filePath) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`);
+        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`, {
+            cause: error,
+        });
     }
 }
 /**

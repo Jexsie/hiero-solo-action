@@ -34506,7 +34506,7 @@ function safeInfo(message) {
     try {
         info(message);
     }
-    catch (error) {
+    catch {
         console.log(message); // Fallback to console.log if info fails
     }
 }
@@ -34523,7 +34523,7 @@ async function safeExec(command, args, options) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`);
+        throw new Error(`Command failed: ${command} ${args?.join(" ") ?? ""} - ${errorMessage}`, { cause: error });
     }
 }
 /**
@@ -34596,7 +34596,9 @@ function safeReadFileSync(filePath) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`);
+        throw new Error(`Failed to read file ${filePath}: ${errorMessage}`, {
+            cause: error,
+        });
     }
 }
 /**
@@ -34676,7 +34678,8 @@ async function setupDependencies() {
             const extractedJavaDir = await extractTar(downloadedJava);
             // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
             const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
-            const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) || dirContents[0];
+            const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
+                dirContents[0];
             const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
             const cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
             addPath((0,external_path_namespaceObject.join)(cachedJava, "bin"));
@@ -34710,7 +34713,7 @@ async function setupDependencies() {
         safeInfo("✅ All dependencies installed successfully.");
     }
     catch (error) {
-        throw new Error(`Dependency setup failed: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Dependency setup failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
     finally {
         endGroup();
@@ -34925,7 +34928,9 @@ async function deploySoloTestNetwork(soloGe0440) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to save cluster name state: ${errorMessage}`);
+        throw new Error(`Failed to save cluster name state: ${errorMessage}`, {
+            cause: error,
+        });
     }
     try {
         await createKindCluster(clusterName);
@@ -34957,7 +34962,9 @@ async function deploySoloTestNetwork(soloGe0440) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to deploy Solo test network: ${errorMessage}`);
+        throw new Error(`Failed to deploy Solo test network: ${errorMessage}`, {
+            cause: error,
+        });
     }
 }
 /**
@@ -35005,7 +35012,9 @@ async function deployMirrorNode(soloGe0440) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to deploy Mirror Node: ${errorMessage}`);
+        throw new Error(`Failed to deploy Mirror Node: ${errorMessage}`, {
+            cause: error,
+        });
     }
 }
 /**
@@ -35120,7 +35129,9 @@ async function createAccount(type, soloGe0440) {
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to create ${type} account: ${errorMessage}`);
+        throw new Error(`Failed to create ${type} account: ${errorMessage}`, {
+            cause: error,
+        });
     }
 }
 /**
