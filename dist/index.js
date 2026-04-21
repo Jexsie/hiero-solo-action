@@ -34628,6 +34628,8 @@ const KIND_VERSION = "v0.29.0";
 const KIND_DOWNLOAD_URL = `https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`;
 const KUBECTL_VERSION = "v1.32.2";
 const KUBECTL_DOWNLOAD_URL = `https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`;
+const JQ_VERSION = "1.7.1";
+const JQ_DOWNLOAD_URL = `https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`;
 const NODE_VERSION = "24.0.1";
 const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
 
@@ -34707,6 +34709,19 @@ async function setupDependencies() {
             await runCommand(`chmod +x ${downloadedKubectl}`);
             const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
             addPath(cachedKubectl);
+        }
+        // Setup jq
+        const jqPath = await which("jq", false);
+        if (!jqPath) {
+            safeInfo(`Downloading jq ${JQ_VERSION}...`);
+            const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
+            await runCommand(`chmod +x ${downloadedJq}`);
+            const cachedJq = await cacheFile(downloadedJq, "jq", "jq", JQ_VERSION);
+            addPath(cachedJq);
+            safeInfo("jq installed successfully.");
+        }
+        else {
+            safeInfo(`jq is already installed at ${jqPath}.`);
         }
         // Setup Node.js / npm
         const npmPath = await which("npm", false);
