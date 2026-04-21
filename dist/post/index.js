@@ -31089,8 +31089,15 @@ function isVersionGte(version, target) {
 ;// CONCATENATED MODULE: ./src/post.ts
 
 
+
+
+
 /**
- * Cleanup function to delete the kind cluster
+ * Cleanup function to delete the kind cluster and Solo state.
+ *
+ * On self-hosted runners all jobs share the same machine, so we must
+ * remove every piece of state that would cause the next run to fail
+ * (e.g. "A deployment named solo-deployment already exists").
  */
 async function cleanup() {
     const clusterName = getState("clusterName");
@@ -31099,6 +31106,7 @@ async function cleanup() {
         return;
     }
     safeInfo(`[cleanup] Starting cleanup for cluster: ${clusterName}`);
+    // Deletes the kind cluster
     try {
         await runCommand(`kind delete cluster --name ${clusterName}`);
         safeInfo(`[cleanup] Cluster '${clusterName}' deleted successfully`);
@@ -31106,6 +31114,27 @@ async function cleanup() {
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         warning(`[cleanup] Failed to delete cluster '${clusterName}': ${message}`);
+    }
+    // Remove Solo's local config directory so the next job starts fresh
+    const soloConfigDir = (0,external_path_namespaceObject.join)((0,external_os_namespaceObject.homedir)(), ".solo");
+    try {
+        (0,external_fs_namespaceObject.rmSync)(soloConfigDir, { recursive: true, force: true });
+        safeInfo(`[cleanup] Removed Solo config directory: ${soloConfigDir}`);
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warning(`[cleanup] Failed to remove Solo config directory: ${message}`);
+    }
+    // Prune leftover Docker resources (containers, networks, volumes)
+    try {
+        await runCommand("docker system prune -af --volumes", {
+            ignoreReturnCode: true,
+        });
+        safeInfo("[cleanup] Docker resources pruned successfully");
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warning(`[cleanup] Failed to prune Docker resources: ${message}`);
     }
 }
 async function main() {
