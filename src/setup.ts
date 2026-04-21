@@ -20,6 +20,8 @@ import {
     KIND_DOWNLOAD_URL,
     KUBECTL_VERSION,
     KUBECTL_DOWNLOAD_URL,
+    JQ_VERSION,
+    JQ_DOWNLOAD_URL,
     NODE_VERSION,
     NODE_DOWNLOAD_URL,
 } from "./constants.js";
@@ -121,6 +123,24 @@ export async function setupDependencies(): Promise<void> {
                 KUBECTL_VERSION,
             );
             addPath(cachedKubectl);
+        }
+
+        // Setup jq
+        const jqPath = await which("jq", false);
+        if (!jqPath) {
+            safeInfo(`Downloading jq ${JQ_VERSION}...`);
+            const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
+            await runCommand(`chmod +x ${downloadedJq}`);
+            const cachedJq = await cacheFile(
+                downloadedJq,
+                "jq",
+                "jq",
+                JQ_VERSION,
+            );
+            addPath(cachedJq);
+            safeInfo("jq installed successfully.");
+        } else {
+            safeInfo(`jq is already installed at ${jqPath}.`);
         }
 
         // Setup Node.js / npm

@@ -16,5 +16,8 @@ export const KIND_DOWNLOAD_URL = `https://kind.sigs.k8s.io/dl/${KIND_VERSION}/ki
 export const KUBECTL_VERSION = "v1.32.2";
 export const KUBECTL_DOWNLOAD_URL = `https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`;
 
+export const JQ_VERSION = "1.7.1";
+export const JQ_DOWNLOAD_URL = `https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`;
+
 export const NODE_VERSION = "24.0.1";
 export const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
