@@ -34788,6 +34788,7 @@ async function checkSoloVersion() {
  * Creates a Kubernetes cluster using kind
  */
 async function createKindCluster(clusterName) {
+    await runCommand(`kind delete cluster --name ${clusterName}`);
     await runCommand(`kind create cluster -n ${clusterName}`);
 }
 /**
