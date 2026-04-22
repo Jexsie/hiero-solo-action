@@ -1,5 +1,6 @@
 import { getState, warning, error as coreError } from "@actions/core";
 import { runCommand, safeInfo } from "./utils.js";
+import { CLUSTER_NAME } from "./constants.js";
 import { homedir } from "os";
 import { join } from "path";
 import { rmSync } from "fs";
@@ -12,12 +13,7 @@ import { rmSync } from "fs";
  * (e.g. "A deployment named solo-deployment already exists").
  */
 async function cleanup(): Promise<void> {
-    const clusterName = getState("clusterName");
-
-    if (!clusterName) {
-        safeInfo("[cleanup] No cluster name found in state, skipping cleanup");
-        return;
-    }
+    const clusterName = getState("clusterName") || CLUSTER_NAME;
 
     safeInfo(`[cleanup] Starting cleanup for cluster: ${clusterName}`);
 
@@ -40,17 +36,6 @@ async function cleanup(): Promise<void> {
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         warning(`[cleanup] Failed to remove Solo config directory: ${message}`);
-    }
-
-    // Prune leftover Docker resources (containers, networks, volumes)
-    try {
-        await runCommand("docker system prune -af --volumes", {
-            ignoreReturnCode: true,
-        });
-        safeInfo("[cleanup] Docker resources pruned successfully");
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        warning(`[cleanup] Failed to prune Docker resources: ${message}`);
     }
 }
 

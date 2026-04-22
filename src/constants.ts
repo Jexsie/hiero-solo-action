@@ -1,3 +1,39 @@
+// ---------------------------------------------------------------------------
+// Solo infrastructure constants
+// ---------------------------------------------------------------------------
+
+/** Name of the kind cluster created by the action */
+export const CLUSTER_NAME = "solo-e2e";
+
+/** Kubernetes namespace used for the Solo deployment */
+export const NAMESPACE = "solo";
+
+/** Name of the Solo deployment */
+export const DEPLOYMENT_NAME = "solo-deployment";
+
+// Default port numbers (used as fallbacks when action inputs are not provided)
+export const DEFAULT_HAPROXY_PORT = "50211";
+export const DEFAULT_GRPC_PROXY_PORT = "9998";
+export const DEFAULT_DUAL_MODE_GRPC_PROXY_PORT = "9999";
+export const DEFAULT_MIRROR_NODE_PORT_REST = "5551";
+export const DEFAULT_MIRROR_NODE_PORT_GRPC = "5600";
+export const DEFAULT_MIRROR_NODE_PORT_WEB3 = "8545";
+export const DEFAULT_JAVA_REST_API_PORT = "8084";
+export const DEFAULT_RELAY_PORT = "7546";
+export const DEFAULT_HBAR_AMOUNT = "10000000";
+
+// Internal target ports (the ports services listen on inside the cluster)
+export const HAPROXY_INTERNAL_PORT = "50211";
+export const HAPROXY_NODE2_EXTERNAL_PORT = "51211";
+export const GRPC_PROXY_INTERNAL_PORT = "8080";
+export const MIRROR_NODE_REST_INTERNAL_PORT = "80";
+export const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
+export const RELAY_INTERNAL_PORT = "7546";
+
+// ---------------------------------------------------------------------------
+// Tooling constants
+// ---------------------------------------------------------------------------
+
 export const PYTHON_VERSION = "3.12.9";
 export const PYTHON_RELEASE_TAG = "20250409";
 export const PYTHON_DOWNLOAD_URL = `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
