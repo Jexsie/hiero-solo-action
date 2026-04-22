@@ -35018,8 +35018,9 @@ async function setupHostsEntries(namespace, dualMode) {
             safeInfo("⚠️  No sudo access available, skipping /etc/hosts update. Nodes can still be accessed via localhost.");
         }
     }
-    catch {
-        safeInfo("⚠️  Failed to update /etc/hosts, continuing...");
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        safeInfo(`⚠️  Failed to update /etc/hosts: ${errorMessage}, continuing...`);
     }
 }
 /**
@@ -35151,7 +35152,7 @@ async function deployRelay(soloGe0440) {
             baseArgs = `solo relay deploy -i node1 --deployment ${DEPLOYMENT_NAME} --dev`;
         }
         // Add --values-file if relay-low-resources.yaml exists
-        const workspacePath = process.env.GITHUB_WORKSPACE || ".";
+        const workspacePath = process.env.GITHUB_WORKSPACE ?? ".";
         const relayValuesFile = (0,external_path_namespaceObject.join)(workspacePath, "relay-low-resources.yaml");
         if ((0,external_fs_namespaceObject.existsSync)(relayValuesFile)) {
             baseArgs += ` --values-file ${relayValuesFile}`;

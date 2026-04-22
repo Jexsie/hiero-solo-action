@@ -248,8 +248,12 @@ async function setupHostsEntries(
                 "⚠️  No sudo access available, skipping /etc/hosts update. Nodes can still be accessed via localhost.",
             );
         }
-    } catch {
-        safeInfo("⚠️  Failed to update /etc/hosts, continuing...");
+    } catch (error: unknown) {
+        const errorMessage =
+            error instanceof Error ? error.message : String(error);
+        safeInfo(
+            `⚠️  Failed to update /etc/hosts: ${errorMessage}, continuing...`,
+        );
     }
 }
 
@@ -284,7 +288,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
 
     try {
         saveState("clusterName", CLUSTER_NAME);
-    } catch (error) {
+    } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to save cluster name state: ${errorMessage}`, {
@@ -350,7 +354,7 @@ async function deploySoloTestNetwork(soloGe0440: boolean): Promise<void> {
             `${grpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`,
             NAMESPACE,
         );
-    } catch (error) {
+    } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to deploy Solo test network: ${errorMessage}`, {
@@ -426,7 +430,7 @@ async function deployMirrorNode(soloGe0440: boolean): Promise<void> {
             `${javaRestApiPort}:${MIRROR_NODE_REST_INTERNAL_PORT}`,
             NAMESPACE,
         );
-    } catch (error) {
+    } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to deploy Mirror Node: ${errorMessage}`, {
@@ -454,7 +458,7 @@ async function deployRelay(soloGe0440: boolean): Promise<void> {
         }
 
         // Add --values-file if relay-low-resources.yaml exists
-        const workspacePath = process.env.GITHUB_WORKSPACE || ".";
+        const workspacePath = process.env.GITHUB_WORKSPACE ?? ".";
         const relayValuesFile = join(workspacePath, "relay-low-resources.yaml");
         if (existsSync(relayValuesFile)) {
             baseArgs += ` --values-file ${relayValuesFile}`;
@@ -473,7 +477,7 @@ async function deployRelay(soloGe0440: boolean): Promise<void> {
             `${relayPort}:${RELAY_INTERNAL_PORT}`,
             NAMESPACE,
         );
-    } catch (error) {
+    } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         safeInfo(
@@ -566,7 +570,7 @@ async function createAccount(
             safeSetOutput("publicKey", publicKey);
             safeSetOutput("privateKey", privateKey.trim());
         }
-    } catch (error) {
+    } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to create ${type} account: ${errorMessage}`, {
@@ -598,7 +602,7 @@ async function run(): Promise<void> {
         // Create accounts
         await createAccount("ecdsa", soloGe0440);
         await createAccount("ed25519", soloGe0440);
-    } catch (error) {
+    } catch (error: unknown) {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         safeSetFailed(`Script execution failed: ${errorMessage}`);
@@ -606,7 +610,7 @@ async function run(): Promise<void> {
 }
 
 // Execute the main function and handle any unhandled errors
-run().catch((error) => {
+run().catch((error: unknown) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     safeSetFailed(`Unhandled error in main execution: ${errorMessage}`);
 });

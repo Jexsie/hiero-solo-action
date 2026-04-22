@@ -21,7 +21,7 @@ async function cleanup(): Promise<void> {
     try {
         await runCommand(`kind delete cluster --name ${clusterName}`);
         safeInfo(`[cleanup] Cluster '${clusterName}' deleted successfully`);
-    } catch (err) {
+    } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         warning(
             `[cleanup] Failed to delete cluster '${clusterName}': ${message}`,
@@ -33,7 +33,7 @@ async function cleanup(): Promise<void> {
     try {
         rmSync(soloConfigDir, { recursive: true, force: true });
         safeInfo(`[cleanup] Removed Solo config directory: ${soloConfigDir}`);
-    } catch (err) {
+    } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         warning(`[cleanup] Failed to remove Solo config directory: ${message}`);
     }
@@ -42,13 +42,13 @@ async function cleanup(): Promise<void> {
 async function main(): Promise<void> {
     try {
         await cleanup();
-    } catch (err) {
+    } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         warning(`[main] Cleanup threw an error: ${message}`);
     }
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
     const message = err instanceof Error ? err.message : String(err);
     coreError(`[main] Unhandled error: ${message}`);
     process.exitCode = 1;
