@@ -212,7 +212,7 @@ export async function setupDependencies(): Promise<void> {
         await runCommand(`npm install -g @hashgraph/solo@${soloVersion}`);
 
         safeInfo("✅ All dependencies installed successfully.");
-    } catch (error) {
+    } catch (error: unknown) {
         throw new Error(
             `Dependency setup failed: ${error instanceof Error ? error.message : String(error)}`,
             { cause: error },
@@ -260,7 +260,7 @@ export async function checkSoloVersion(): Promise<boolean> {
         const ge0440 = isVersionGte(version, "0.44.0");
         safeInfo(`[checkSoloVersion] version=${version}, >= 0.44.0: ${ge0440}`);
         return ge0440;
-    } catch (error) {
+    } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
         safeInfo(
             `[checkSoloVersion] Failed to detect version: ${msg}. Assuming >= 0.44.0.`,
