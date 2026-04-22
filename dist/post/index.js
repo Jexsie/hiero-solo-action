@@ -30785,7 +30785,7 @@ function setCommandEcho(enabled) {
  * When the action exits it will be with an exit code of 1
  * @param message add error issue message
  */
-function setFailed(message) {
+function core_setFailed(message) {
     process.exitCode = ExitCode.Failure;
     error(message);
 }
@@ -30966,6 +30966,18 @@ function safeSetOutput(name, value) {
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         info(`Failed to set output ${name}: ${errorMessage}`);
+    }
+}
+/**
+ * Safely sets failed state with proper error handling
+ */
+function safeSetFailed(message) {
+    try {
+        setFailed(message);
+    }
+    catch {
+        console.error(`Failed to set failed state: ${message}`);
+        process.exit(1);
     }
 }
 /**
