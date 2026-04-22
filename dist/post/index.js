@@ -30785,7 +30785,7 @@ function setCommandEcho(enabled) {
  * When the action exits it will be with an exit code of 1
  * @param message add error issue message
  */
-function setFailed(message) {
+function core_setFailed(message) {
     process.exitCode = ExitCode.Failure;
     error(message);
 }
@@ -30969,6 +30969,18 @@ function safeSetOutput(name, value) {
     }
 }
 /**
+ * Safely sets failed state with proper error handling
+ */
+function safeSetFailed(message) {
+    try {
+        setFailed(message);
+    }
+    catch {
+        console.error(`Failed to set failed state: ${message}`);
+        process.exit(1);
+    }
+}
+/**
  * Safely logs info with proper error handling
  * @param message - The message to log
  */
@@ -31086,19 +31098,70 @@ function isVersionGte(version, target) {
     return aPatch >= bPatch;
 }
 
+;// CONCATENATED MODULE: ./src/constants.ts
+// ---------------------------------------------------------------------------
+// Solo infrastructure constants
+// ---------------------------------------------------------------------------
+/** Name of the kind cluster created by the action */
+const CLUSTER_NAME = "solo-e2e";
+/** Kubernetes namespace used for the Solo deployment */
+const NAMESPACE = "solo";
+/** Name of the Solo deployment */
+const DEPLOYMENT_NAME = "solo-deployment";
+// Default port numbers (used as fallbacks when action inputs are not provided)
+const DEFAULT_HAPROXY_PORT = "50211";
+const DEFAULT_GRPC_PROXY_PORT = "9998";
+const DEFAULT_DUAL_MODE_GRPC_PROXY_PORT = "9999";
+const DEFAULT_MIRROR_NODE_PORT_REST = "5551";
+const DEFAULT_MIRROR_NODE_PORT_GRPC = "5600";
+const DEFAULT_MIRROR_NODE_PORT_WEB3 = "8545";
+const DEFAULT_JAVA_REST_API_PORT = "8084";
+const DEFAULT_RELAY_PORT = "7546";
+const DEFAULT_HBAR_AMOUNT = "10000000";
+// Internal target ports (the ports services listen on inside the cluster)
+const HAPROXY_INTERNAL_PORT = "50211";
+const HAPROXY_NODE2_EXTERNAL_PORT = "51211";
+const GRPC_PROXY_INTERNAL_PORT = "8080";
+const MIRROR_NODE_REST_INTERNAL_PORT = "80";
+const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
+const RELAY_INTERNAL_PORT = "7546";
+// ---------------------------------------------------------------------------
+// Tooling constants
+// ---------------------------------------------------------------------------
+const PYTHON_VERSION = "3.12.9";
+const PYTHON_RELEASE_TAG = "20250409";
+const PYTHON_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`));
+const WGET_VERSION = "1.25.0";
+const WGET_DOWNLOAD_URL = "https://github.com/userdocs/qbt-workflow-files/releases/latest/download/wget";
+const JAVA_VERSION = "21.0.6";
+const JAVA_DOWNLOAD_URL = "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk";
+const KIND_VERSION = "v0.29.0";
+const KIND_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`));
+const KUBECTL_VERSION = "v1.32.2";
+const KUBECTL_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`));
+const JQ_VERSION = "1.7.1";
+const JQ_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`));
+const NODE_VERSION = "24.0.1";
+const NODE_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`));
+
 ;// CONCATENATED MODULE: ./src/post.ts
 
 
+
+
+
+
 /**
- * Cleanup function to delete the kind cluster
+ * Cleanup function to delete the kind cluster and Solo state.
+ *
+ * On self-hosted runners all jobs share the same machine, so we must
+ * remove every piece of state that would cause the next run to fail
+ * (e.g. "A deployment named solo-deployment already exists").
  */
 async function cleanup() {
-    const clusterName = getState("clusterName");
-    if (!clusterName) {
-        safeInfo("[cleanup] No cluster name found in state, skipping cleanup");
-        return;
-    }
+    const clusterName = getState("clusterName") || CLUSTER_NAME;
     safeInfo(`[cleanup] Starting cleanup for cluster: ${clusterName}`);
+    // Deletes the kind cluster
     try {
         await runCommand(`kind delete cluster --name ${clusterName}`);
         safeInfo(`[cleanup] Cluster '${clusterName}' deleted successfully`);
@@ -31106,6 +31169,16 @@ async function cleanup() {
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         warning(`[cleanup] Failed to delete cluster '${clusterName}': ${message}`);
+    }
+    // Remove Solo's local config directory so the next job starts fresh
+    const soloConfigDir = (0,external_path_namespaceObject.join)((0,external_os_namespaceObject.homedir)(), ".solo");
+    try {
+        (0,external_fs_namespaceObject.rmSync)(soloConfigDir, { recursive: true, force: true });
+        safeInfo(`[cleanup] Removed Solo config directory: ${soloConfigDir}`);
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warning(`[cleanup] Failed to remove Solo config directory: ${message}`);
     }
 }
 async function main() {

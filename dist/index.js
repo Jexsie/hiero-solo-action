@@ -34259,7 +34259,7 @@ function find(toolName, versionSpec, arch) {
     if (!versionSpec) {
         throw new Error('versionSpec parameter is required');
     }
-    arch = arch || os.arch();
+    arch = arch || external_os_namespaceObject.arch();
     // attempt to resolve an explicit version
     if (!isExplicitVersion(versionSpec)) {
         const localVersions = findAllVersions(toolName, arch);
@@ -34269,15 +34269,15 @@ function find(toolName, versionSpec, arch) {
     // check for the explicit version in the cache
     let toolPath = '';
     if (versionSpec) {
-        versionSpec = semver.clean(versionSpec) || '';
-        const cachePath = path.join(_getCacheDirectory(), toolName, versionSpec, arch);
-        core.debug(`checking cache: ${cachePath}`);
-        if (fs.existsSync(cachePath) && fs.existsSync(`${cachePath}.complete`)) {
-            core.debug(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
+        versionSpec = node_modules_semver.clean(versionSpec) || '';
+        const cachePath = external_path_namespaceObject.join(_getCacheDirectory(), toolName, versionSpec, arch);
+        core_debug(`checking cache: ${cachePath}`);
+        if (external_fs_namespaceObject.existsSync(cachePath) && external_fs_namespaceObject.existsSync(`${cachePath}.complete`)) {
+            core_debug(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
             toolPath = cachePath;
         }
         else {
-            core.debug('not found');
+            core_debug('not found');
         }
     }
     return toolPath;
@@ -34290,14 +34290,14 @@ function find(toolName, versionSpec, arch) {
  */
 function findAllVersions(toolName, arch) {
     const versions = [];
-    arch = arch || os.arch();
-    const toolPath = path.join(_getCacheDirectory(), toolName);
-    if (fs.existsSync(toolPath)) {
-        const children = fs.readdirSync(toolPath);
+    arch = arch || external_os_namespaceObject.arch();
+    const toolPath = external_path_namespaceObject.join(_getCacheDirectory(), toolName);
+    if (external_fs_namespaceObject.existsSync(toolPath)) {
+        const children = external_fs_namespaceObject.readdirSync(toolPath);
         for (const child of children) {
             if (isExplicitVersion(child)) {
-                const fullPath = path.join(toolPath, child, arch || '');
-                if (fs.existsSync(fullPath) && fs.existsSync(`${fullPath}.complete`)) {
+                const fullPath = external_path_namespaceObject.join(toolPath, child, arch || '');
+                if (external_fs_namespaceObject.existsSync(fullPath) && external_fs_namespaceObject.existsSync(`${fullPath}.complete`)) {
                     versions.push(child);
                 }
             }
@@ -34381,10 +34381,10 @@ function _completeToolPath(tool, version, arch) {
  * @param versionSpec      version string to check
  */
 function isExplicitVersion(versionSpec) {
-    const c = semver.clean(versionSpec) || '';
-    core.debug(`isExplicit: ${c}`);
-    const valid = semver.valid(c) != null;
-    core.debug(`explicit? ${valid}`);
+    const c = node_modules_semver.clean(versionSpec) || '';
+    core_debug(`isExplicit: ${c}`);
+    const valid = node_modules_semver.valid(c) != null;
+    core_debug(`explicit? ${valid}`);
     return valid;
 }
 /**
@@ -34395,26 +34395,26 @@ function isExplicitVersion(versionSpec) {
  */
 function evaluateVersions(versions, versionSpec) {
     let version = '';
-    core.debug(`evaluating ${versions.length} versions`);
+    core_debug(`evaluating ${versions.length} versions`);
     versions = versions.sort((a, b) => {
-        if (semver.gt(a, b)) {
+        if (node_modules_semver.gt(a, b)) {
             return 1;
         }
         return -1;
     });
     for (let i = versions.length - 1; i >= 0; i--) {
         const potential = versions[i];
-        const satisfied = semver.satisfies(potential, versionSpec);
+        const satisfied = node_modules_semver.satisfies(potential, versionSpec);
         if (satisfied) {
             version = potential;
             break;
         }
     }
     if (version) {
-        core.debug(`matched: ${version}`);
+        core_debug(`matched: ${version}`);
     }
     else {
-        core.debug('match not found');
+        core_debug('match not found');
     }
     return version;
 }
@@ -34496,6 +34496,18 @@ function safeSetOutput(name, value) {
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         info(`Failed to set output ${name}: ${errorMessage}`);
+    }
+}
+/**
+ * Safely sets failed state with proper error handling
+ */
+function safeSetFailed(message) {
+    try {
+        setFailed(message);
+    }
+    catch {
+        console.error(`Failed to set failed state: ${message}`);
+        process.exit(1);
     }
 }
 /**
@@ -34617,6 +34629,35 @@ function isVersionGte(version, target) {
 }
 
 ;// CONCATENATED MODULE: ./src/constants.ts
+// ---------------------------------------------------------------------------
+// Solo infrastructure constants
+// ---------------------------------------------------------------------------
+/** Name of the kind cluster created by the action */
+const CLUSTER_NAME = "solo-e2e";
+/** Kubernetes namespace used for the Solo deployment */
+const NAMESPACE = "solo";
+/** Name of the Solo deployment */
+const DEPLOYMENT_NAME = "solo-deployment";
+// Default port numbers (used as fallbacks when action inputs are not provided)
+const DEFAULT_HAPROXY_PORT = "50211";
+const DEFAULT_GRPC_PROXY_PORT = "9998";
+const DEFAULT_DUAL_MODE_GRPC_PROXY_PORT = "9999";
+const DEFAULT_MIRROR_NODE_PORT_REST = "5551";
+const DEFAULT_MIRROR_NODE_PORT_GRPC = "5600";
+const DEFAULT_MIRROR_NODE_PORT_WEB3 = "8545";
+const DEFAULT_JAVA_REST_API_PORT = "8084";
+const DEFAULT_RELAY_PORT = "7546";
+const DEFAULT_HBAR_AMOUNT = "10000000";
+// Internal target ports (the ports services listen on inside the cluster)
+const HAPROXY_INTERNAL_PORT = "50211";
+const HAPROXY_NODE2_EXTERNAL_PORT = "51211";
+const GRPC_PROXY_INTERNAL_PORT = "8080";
+const MIRROR_NODE_REST_INTERNAL_PORT = "80";
+const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
+const RELAY_INTERNAL_PORT = "7546";
+// ---------------------------------------------------------------------------
+// Tooling constants
+// ---------------------------------------------------------------------------
 const PYTHON_VERSION = "3.12.9";
 const PYTHON_RELEASE_TAG = "20250409";
 const PYTHON_DOWNLOAD_URL = `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
@@ -34628,6 +34669,10 @@ const KIND_VERSION = "v0.29.0";
 const KIND_DOWNLOAD_URL = `https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`;
 const KUBECTL_VERSION = "v1.32.2";
 const KUBECTL_DOWNLOAD_URL = `https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`;
+const JQ_VERSION = "1.7.1";
+const JQ_DOWNLOAD_URL = `https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`;
+const NODE_VERSION = "24.0.1";
+const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
 
 ;// CONCATENATED MODULE: ./src/setup.ts
 
@@ -34647,12 +34692,18 @@ async function setupDependencies() {
         // Setup Python 3
         const pythonPath = (await which("python3", false)) || (await which("python", false));
         if (!pythonPath) {
-            safeInfo("Installing Python 3.12 via python-build-standalone...");
-            const downloadedPython = await downloadTool(PYTHON_DOWNLOAD_URL);
-            const extractedPythonDir = await extractTar(downloadedPython);
-            const cachedPython = await cacheDir((0,external_path_namespaceObject.join)(extractedPythonDir, "python"), "python", PYTHON_VERSION);
+            let cachedPython = find("python", PYTHON_VERSION);
+            if (!cachedPython) {
+                safeInfo(`Installing Python ${PYTHON_VERSION} via python-build-standalone...`);
+                const downloadedPython = await downloadTool(PYTHON_DOWNLOAD_URL);
+                const extractedPythonDir = await extractTar(downloadedPython);
+                cachedPython = await cacheDir((0,external_path_namespaceObject.join)(extractedPythonDir, "python"), "python", PYTHON_VERSION);
+                safeInfo("Python installed successfully.");
+            }
+            else {
+                safeInfo(`Python ${PYTHON_VERSION} found in tool-cache.`);
+            }
             addPath((0,external_path_namespaceObject.join)(cachedPython, "bin"));
-            safeInfo("Python installed successfully.");
         }
         else {
             safeInfo(`Python is already installed at ${pythonPath}.`);
@@ -34660,12 +34711,18 @@ async function setupDependencies() {
         // Setup wget
         const wgetPath = await which("wget", false);
         if (!wgetPath) {
-            safeInfo("Installing wget via static binary...");
-            const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedWget}`);
-            const cachedWget = await cacheFile(downloadedWget, "wget", "wget", WGET_VERSION);
+            let cachedWget = find("wget", WGET_VERSION);
+            if (!cachedWget) {
+                safeInfo("Installing wget via static binary...");
+                const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedWget}`);
+                cachedWget = await cacheFile(downloadedWget, "wget", "wget", WGET_VERSION);
+                safeInfo("wget installed successfully.");
+            }
+            else {
+                safeInfo(`wget ${WGET_VERSION} found in tool-cache.`);
+            }
             addPath(cachedWget);
-            safeInfo("wget installed successfully.");
         }
         else {
             safeInfo(`wget is already installed at ${wgetPath}.`);
@@ -34673,17 +34730,23 @@ async function setupDependencies() {
         // Setup Java 21 (Adoptium Temurin)
         const javaPath = await which("java", false);
         if (!javaPath) {
-            safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
-            const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
-            const extractedJavaDir = await extractTar(downloadedJava);
-            // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-            const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
-            const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
-                dirContents[0];
-            const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
-            const cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
+            let cachedJava = find("java", JAVA_VERSION);
+            if (!cachedJava) {
+                safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
+                const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
+                const extractedJavaDir = await extractTar(downloadedJava);
+                // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
+                const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
+                const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
+                    dirContents[0];
+                const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
+                cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
+                safeInfo(`Java installed at ${cachedJava}.`);
+            }
+            else {
+                safeInfo(`Java ${JAVA_VERSION} found in tool-cache.`);
+            }
             addPath((0,external_path_namespaceObject.join)(cachedJava, "bin"));
-            safeInfo(`Java installed at ${cachedJava}.`);
         }
         else {
             safeInfo(`Java is already installed at ${javaPath}.`);
@@ -34691,20 +34754,78 @@ async function setupDependencies() {
         // Setup Kind
         const kindPath = await which("kind", false);
         if (!kindPath) {
-            safeInfo(`Downloading Kind ${KIND_VERSION}...`);
-            const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedKind}`);
-            const cachedKind = await cacheFile(downloadedKind, "kind", "kind", KIND_VERSION);
+            let cachedKind = find("kind", KIND_VERSION);
+            if (!cachedKind) {
+                safeInfo(`Downloading Kind ${KIND_VERSION}...`);
+                const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedKind}`);
+                cachedKind = await cacheFile(downloadedKind, "kind", "kind", KIND_VERSION);
+            }
+            else {
+                safeInfo(`Kind ${KIND_VERSION} found in tool-cache.`);
+            }
             addPath(cachedKind);
+        }
+        else {
+            safeInfo(`Kind is already installed at ${kindPath}.`);
         }
         // Setup kubectl
         const kubectlPath = await which("kubectl", false);
         if (!kubectlPath) {
-            safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
-            const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedKubectl}`);
-            const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
+            let cachedKubectl = find("kubectl", KUBECTL_VERSION);
+            if (!cachedKubectl) {
+                safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
+                const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedKubectl}`);
+                cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
+            }
+            else {
+                safeInfo(`kubectl ${KUBECTL_VERSION} found in tool-cache.`);
+            }
             addPath(cachedKubectl);
+        }
+        else {
+            safeInfo(`kubectl is already installed at ${kubectlPath}.`);
+        }
+        // Setup jq
+        const jqPath = await which("jq", false);
+        if (!jqPath) {
+            let cachedJq = find("jq", JQ_VERSION);
+            if (!cachedJq) {
+                safeInfo(`Downloading jq ${JQ_VERSION}...`);
+                const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedJq}`);
+                cachedJq = await cacheFile(downloadedJq, "jq", "jq", JQ_VERSION);
+                safeInfo("jq installed successfully.");
+            }
+            else {
+                safeInfo(`jq ${JQ_VERSION} found in tool-cache.`);
+            }
+            addPath(cachedJq);
+        }
+        else {
+            safeInfo(`jq is already installed at ${jqPath}.`);
+        }
+        // Setup Node.js / npm
+        const npmPath = await which("npm", false);
+        if (!npmPath) {
+            let cachedNode = find("node", NODE_VERSION);
+            if (!cachedNode) {
+                safeInfo("Installing Node.js (includes npm) via official tarball...");
+                const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
+                const extractedNodeDir = await extractTar(downloadedNode, undefined, ["xJ"]);
+                const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
+                const nodeHomePath = (0,external_path_namespaceObject.join)(extractedNodeDir, nodeDir);
+                cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
+                safeInfo("Node.js and npm installed successfully.");
+            }
+            else {
+                safeInfo(`Node.js ${NODE_VERSION} found in tool-cache.`);
+            }
+            addPath((0,external_path_namespaceObject.join)(cachedNode, "bin"));
+        }
+        else {
+            safeInfo(`npm is already installed at ${npmPath}.`);
         }
         // Install Solo CLI
         const soloVersion = getInput("soloVersion") || "latest";
@@ -34759,6 +34880,7 @@ async function checkSoloVersion() {
 }
 
 ;// CONCATENATED MODULE: ./src/index.ts
+
 
 
 
@@ -34908,23 +35030,21 @@ async function setupHostsEntries(namespace, dualMode) {
  * - Configurable port-forwarding (HAProxy, gRPC proxy)
  */
 async function deploySoloTestNetwork(soloGe0440) {
-    const clusterName = "solo-e2e";
-    const namespace = "solo";
-    const deployment = "solo-deployment";
     const hieroVersion = safeGetInput("hieroVersion");
     const dualMode = safeGetInput("dualMode") === "true";
-    const haproxyPort = safeGetInput("haproxyPort") || "50211";
-    const grpcProxyPort = safeGetInput("grpcProxyPort") || "9998";
-    const dualModeGrpcProxyPort = safeGetInput("dualModeGrpcProxyPort") || "9999";
+    const haproxyPort = safeGetInput("haproxyPort") || DEFAULT_HAPROXY_PORT;
+    const grpcProxyPort = safeGetInput("grpcProxyPort") || DEFAULT_GRPC_PROXY_PORT;
+    const dualModeGrpcProxyPort = safeGetInput("dualModeGrpcProxyPort") ||
+        DEFAULT_DUAL_MODE_GRPC_PROXY_PORT;
     if (!hieroVersion) {
         safeInfo("Hiero version not found, skipping deployment");
         return;
     }
     const numNodes = dualMode ? 2 : 1;
     const nodeIds = dualMode ? "node1,node2" : "node1";
-    safeInfo(`[deploySoloTestNetwork] soloGe0440=${soloGe0440}, dualMode=${dualMode}, nodes=${numNodes}, nodeIds=${nodeIds}, hieroVersion=${hieroVersion}`);
+    safeInfo(`[deploySoloTestNetwork] soloGe0440=${soloGe0440}, dualMode=${dualMode}, nodes=${numNodes}, nodeIds=${nodeIds}, hieroVersion=${hieroVersion}, cluster=${CLUSTER_NAME}`);
     try {
-        saveState("clusterName", clusterName);
+        saveState("clusterName", CLUSTER_NAME);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -34933,32 +35053,32 @@ async function deploySoloTestNetwork(soloGe0440) {
         });
     }
     try {
-        await createKindCluster(clusterName);
+        await createKindCluster(CLUSTER_NAME);
         await initializeSolo();
-        await connectSoloToCluster(clusterName, soloGe0440);
-        await createSoloDeployment(namespace, deployment, soloGe0440);
-        await addClusterToDeployment(deployment, clusterName, numNodes, soloGe0440);
-        await generateNodeKeys(deployment, nodeIds, soloGe0440);
-        await setupSoloCluster(clusterName, soloGe0440);
-        await deployNetwork(deployment, nodeIds, hieroVersion, soloGe0440);
-        await setupNode(deployment, nodeIds, hieroVersion, soloGe0440);
-        await startNode(deployment, nodeIds, soloGe0440);
+        await connectSoloToCluster(CLUSTER_NAME, soloGe0440);
+        await createSoloDeployment(NAMESPACE, DEPLOYMENT_NAME, soloGe0440);
+        await addClusterToDeployment(DEPLOYMENT_NAME, CLUSTER_NAME, numNodes, soloGe0440);
+        await generateNodeKeys(DEPLOYMENT_NAME, nodeIds, soloGe0440);
+        await setupSoloCluster(CLUSTER_NAME, soloGe0440);
+        await deployNetwork(DEPLOYMENT_NAME, nodeIds, hieroVersion, soloGe0440);
+        await setupNode(DEPLOYMENT_NAME, nodeIds, hieroVersion, soloGe0440);
+        await startNode(DEPLOYMENT_NAME, nodeIds, soloGe0440);
         // Debug: List services in the solo namespace
-        safeInfo(`Listing services in namespace ${namespace}:`);
-        await runCommand(`kubectl get svc -n ${namespace}`);
+        safeInfo(`Listing services in namespace ${NAMESPACE}:`);
+        await runCommand(`kubectl get svc -n ${NAMESPACE}`);
         // Add /etc/hosts entries
-        await setupHostsEntries(namespace, dualMode);
+        await setupHostsEntries(NAMESPACE, dualMode);
         // Port forward HAProxy for node1
-        await portForwardIfExists("haproxy-node1-svc", `${haproxyPort}:50211`, namespace);
+        await portForwardIfExists("haproxy-node1-svc", `${haproxyPort}:${HAPROXY_INTERNAL_PORT}`, NAMESPACE);
         // Port forwards for node2 if dual mode is enabled
         if (dualMode) {
-            await portForwardIfExists("haproxy-node2-svc", "51211:50211", namespace);
-            safeInfo("HAProxy for node2 is accessible on port 51211");
-            await portForwardIfExists("envoy-proxy-node2-svc", `${dualModeGrpcProxyPort}:8080`, namespace);
+            await portForwardIfExists("haproxy-node2-svc", `${HAPROXY_NODE2_EXTERNAL_PORT}:${HAPROXY_INTERNAL_PORT}`, NAMESPACE);
+            safeInfo(`HAProxy for node2 is accessible on port ${HAPROXY_NODE2_EXTERNAL_PORT}`);
+            await portForwardIfExists("envoy-proxy-node2-svc", `${dualModeGrpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`, NAMESPACE);
             safeInfo(`gRPC proxy for node2 is accessible on port ${dualModeGrpcProxyPort}`);
         }
         // Port forward gRPC proxy for node1
-        await portForwardIfExists("envoy-proxy-node1-svc", `${grpcProxyPort}:8080`, namespace);
+        await portForwardIfExists("envoy-proxy-node1-svc", `${grpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`, NAMESPACE);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -34978,23 +35098,20 @@ async function deployMirrorNode(soloGe0440) {
     // Mirror node is required when installRelay is true
     if (!installMirrorNode && !installRelay)
         return;
-    const namespace = "solo";
-    const deployment = "solo-deployment";
-    const clusterName = "solo-e2e";
     const version = safeGetInput("mirrorNodeVersion");
-    const portRest = safeGetInput("mirrorNodePortRest") || "5551";
-    const portGrpc = safeGetInput("mirrorNodePortGrpc") || "5600";
-    const portWeb3 = safeGetInput("mirrorNodePortWeb3Rest") || "8545";
-    const javaRestApiPort = safeGetInput("javaRestApiPort") || "8084";
+    const portRest = safeGetInput("mirrorNodePortRest") || DEFAULT_MIRROR_NODE_PORT_REST;
+    const portGrpc = safeGetInput("mirrorNodePortGrpc") || DEFAULT_MIRROR_NODE_PORT_GRPC;
+    const portWeb3 = safeGetInput("mirrorNodePortWeb3Rest") || DEFAULT_MIRROR_NODE_PORT_WEB3;
+    const javaRestApiPort = safeGetInput("javaRestApiPort") || DEFAULT_JAVA_REST_API_PORT;
     // Relay requires mirror-ingress-controller; --enable-ingress installs it.
     const enableIngress = installRelay;
     try {
         let baseArgs = "";
         if (soloGe0440) {
-            baseArgs = `solo mirror node add --cluster-ref kind-${clusterName} --deployment ${deployment} --mirror-node-version ${version} --pinger`;
+            baseArgs = `solo mirror node add --cluster-ref kind-${CLUSTER_NAME} --deployment ${DEPLOYMENT_NAME} --mirror-node-version ${version} --pinger`;
         }
         else {
-            baseArgs = `solo mirror-node deploy --cluster-ref kind-${clusterName} --deployment ${deployment} --mirror-node-version ${version} --pinger`;
+            baseArgs = `solo mirror-node deploy --cluster-ref kind-${CLUSTER_NAME} --deployment ${DEPLOYMENT_NAME} --mirror-node-version ${version} --pinger`;
         }
         if (enableIngress) {
             baseArgs += " --enable-ingress";
@@ -35002,13 +35119,13 @@ async function deployMirrorNode(soloGe0440) {
         baseArgs += " --dev";
         await soloRun(baseArgs);
         // Debug: List services in the solo namespace
-        safeInfo(`Listing services in namespace ${namespace}:`);
-        await runCommand(`kubectl get svc -n ${namespace}`);
+        safeInfo(`Listing services in namespace ${NAMESPACE}:`);
+        await runCommand(`kubectl get svc -n ${NAMESPACE}`);
         // Port forward Mirror Node services
-        await portForwardIfExists("mirror-1-rest", `${portRest}:80`, namespace);
-        await portForwardIfExists("mirror-1-grpc", `${portGrpc}:5600`, namespace);
-        await portForwardIfExists("mirror-1-web3", `${portWeb3}:80`, namespace);
-        await portForwardIfExists("mirror-1-restjava", `${javaRestApiPort}:80`, namespace);
+        await portForwardIfExists("mirror-1-rest", `${portRest}:${MIRROR_NODE_REST_INTERNAL_PORT}`, NAMESPACE);
+        await portForwardIfExists("mirror-1-grpc", `${portGrpc}:${MIRROR_NODE_GRPC_INTERNAL_PORT}`, NAMESPACE);
+        await portForwardIfExists("mirror-1-web3", `${portWeb3}:${MIRROR_NODE_REST_INTERNAL_PORT}`, NAMESPACE);
+        await portForwardIfExists("mirror-1-restjava", `${javaRestApiPort}:${MIRROR_NODE_REST_INTERNAL_PORT}`, NAMESPACE);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -35024,16 +35141,14 @@ async function deployRelay(soloGe0440) {
     const installRelay = safeGetInput("installRelay") === "true";
     if (!installRelay)
         return;
-    const namespace = "solo";
-    const deployment = "solo-deployment";
-    const relayPort = safeGetInput("relayPort") || "7546";
+    const relayPort = safeGetInput("relayPort") || DEFAULT_RELAY_PORT;
     try {
         let baseArgs = "";
         if (soloGe0440) {
-            baseArgs = `solo relay node add -i node1 --deployment ${deployment} --dev`;
+            baseArgs = `solo relay node add -i node1 --deployment ${DEPLOYMENT_NAME} --dev`;
         }
         else {
-            baseArgs = `solo relay deploy -i node1 --deployment ${deployment} --dev`;
+            baseArgs = `solo relay deploy -i node1 --deployment ${DEPLOYMENT_NAME} --dev`;
         }
         // Add --values-file if relay-low-resources.yaml exists
         const workspacePath = process.env.GITHUB_WORKSPACE || ".";
@@ -35044,10 +35159,10 @@ async function deployRelay(soloGe0440) {
         await soloRun(baseArgs);
         safeInfo("JSON-RPC-Relay installed successfully");
         // Debug: List services in the solo namespace
-        safeInfo(`Listing services in namespace ${namespace}:`);
-        await runCommand(`kubectl get svc -n ${namespace}`);
+        safeInfo(`Listing services in namespace ${NAMESPACE}:`);
+        await runCommand(`kubectl get svc -n ${NAMESPACE}`);
         // Port forward the Relay service
-        await portForwardIfExists("relay-node1-hedera-json-rpc-relay", `${relayPort}:7546`, namespace);
+        await portForwardIfExists("relay-node1-hedera-json-rpc-relay", `${relayPort}:${RELAY_INTERNAL_PORT}`, NAMESPACE);
     }
     catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -35058,24 +35173,22 @@ async function deployRelay(soloGe0440) {
  * Creates an account (ECDSA or ED25519) with Solo version-aware commands.
  */
 async function createAccount(type, soloGe0440) {
-    const namespace = "solo";
-    const deployment = "solo-deployment";
     const outputFile = `account_create_output_${type}.txt`;
-    const hbarAmount = safeGetInput("hbarAmount") || "10000000";
+    const hbarAmount = safeGetInput("hbarAmount") || DEFAULT_HBAR_AMOUNT;
     safeInfo(`Creating ${type.toUpperCase()} account...`);
     try {
         // Build the create command
         let createArgs = "";
         if (soloGe0440) {
-            createArgs = "solo ledger account create";
+            createArgs = `solo ledger account create`;
         }
         else {
-            createArgs = "solo account create";
+            createArgs = `solo account create`;
         }
         if (type === "ecdsa") {
             createArgs += " --generate-ecdsa-key";
         }
-        createArgs += ` --deployment ${deployment} --dev`;
+        createArgs += ` --deployment ${DEPLOYMENT_NAME} --dev`;
         // Execute and redirect output to file
         const createCommand = `${createArgs} > ${outputFile}`;
         await runCommand(`bash -c '${createCommand}'`);
@@ -35089,7 +35202,7 @@ async function createAccount(type, soloGe0440) {
             return;
         }
         // Get the private key from the Kubernetes secret
-        const privateKeyCmd = `kubectl get secret account-key-${accountId} -n ${namespace} -o jsonpath='{.data.privateKey}' | base64 -d | xargs`;
+        const privateKeyCmd = `kubectl get secret account-key-${accountId} -n ${NAMESPACE} -o jsonpath='{.data.privateKey}' | base64 -d | xargs`;
         let privateKey = "";
         await runCommand(`bash -c "${privateKeyCmd}"`, {
             listeners: {
@@ -35106,7 +35219,7 @@ async function createAccount(type, soloGe0440) {
         else {
             updateArgs = "solo account update";
         }
-        updateArgs += ` --account-id ${accountId} --hbar-amount ${hbarAmount} --deployment ${deployment} --dev`;
+        updateArgs += ` --account-id ${accountId} --hbar-amount ${hbarAmount} --deployment ${DEPLOYMENT_NAME} --dev`;
         await soloRun(updateArgs);
         safeInfo(`accountId=${accountId}`);
         safeInfo(`publicKey=${publicKey}`);
@@ -35132,18 +35245,6 @@ async function createAccount(type, soloGe0440) {
         throw new Error(`Failed to create ${type} account: ${errorMessage}`, {
             cause: error,
         });
-    }
-}
-/**
- * Safely sets failed state with proper error handling
- */
-function safeSetFailed(message) {
-    try {
-        setFailed(message);
-    }
-    catch {
-        console.error(`Failed to set failed state: ${message}`);
-        process.exit(1);
     }
 }
 /**
