@@ -1,6 +1,7 @@
 import { which } from "@actions/io";
 import { startGroup, addPath, endGroup, getInput } from "@actions/core";
 import {
+    find,
     downloadTool,
     cacheFile,
     extractTar,
@@ -38,16 +39,24 @@ export async function setupDependencies(): Promise<void> {
         const pythonPath =
             (await which("python3", false)) || (await which("python", false));
         if (!pythonPath) {
-            safeInfo("Installing Python 3.12 via python-build-standalone...");
-            const downloadedPython = await downloadTool(PYTHON_DOWNLOAD_URL);
-            const extractedPythonDir = await extractTar(downloadedPython);
-            const cachedPython = await cacheDir(
-                join(extractedPythonDir, "python"),
-                "python",
-                PYTHON_VERSION,
-            );
+            let cachedPython = find("python", PYTHON_VERSION);
+            if (!cachedPython) {
+                safeInfo(
+                    `Installing Python ${PYTHON_VERSION} via python-build-standalone...`,
+                );
+                const downloadedPython =
+                    await downloadTool(PYTHON_DOWNLOAD_URL);
+                const extractedPythonDir = await extractTar(downloadedPython);
+                cachedPython = await cacheDir(
+                    join(extractedPythonDir, "python"),
+                    "python",
+                    PYTHON_VERSION,
+                );
+                safeInfo("Python installed successfully.");
+            } else {
+                safeInfo(`Python ${PYTHON_VERSION} found in tool-cache.`);
+            }
             addPath(join(cachedPython, "bin"));
-            safeInfo("Python installed successfully.");
         } else {
             safeInfo(`Python is already installed at ${pythonPath}.`);
         }
@@ -55,17 +64,22 @@ export async function setupDependencies(): Promise<void> {
         // Setup wget
         const wgetPath = await which("wget", false);
         if (!wgetPath) {
-            safeInfo("Installing wget via static binary...");
-            const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedWget}`);
-            const cachedWget = await cacheFile(
-                downloadedWget,
-                "wget",
-                "wget",
-                WGET_VERSION,
-            );
+            let cachedWget = find("wget", WGET_VERSION);
+            if (!cachedWget) {
+                safeInfo("Installing wget via static binary...");
+                const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedWget}`);
+                cachedWget = await cacheFile(
+                    downloadedWget,
+                    "wget",
+                    "wget",
+                    WGET_VERSION,
+                );
+                safeInfo("wget installed successfully.");
+            } else {
+                safeInfo(`wget ${WGET_VERSION} found in tool-cache.`);
+            }
             addPath(cachedWget);
-            safeInfo("wget installed successfully.");
         } else {
             safeInfo(`wget is already installed at ${wgetPath}.`);
         }
@@ -73,24 +87,25 @@ export async function setupDependencies(): Promise<void> {
         // Setup Java 21 (Adoptium Temurin)
         const javaPath = await which("java", false);
         if (!javaPath) {
-            safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
-            const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
-            const extractedJavaDir = await extractTar(downloadedJava);
+            let cachedJava = find("java", JAVA_VERSION);
+            if (!cachedJava) {
+                safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
+                const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
+                const extractedJavaDir = await extractTar(downloadedJava);
 
-            // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-            const dirContents = readdirSync(extractedJavaDir);
-            const jdkDir =
-                dirContents.find((name) => name.startsWith("jdk-")) ??
-                dirContents[0];
-            const javaHomePath = join(extractedJavaDir, jdkDir);
+                // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
+                const dirContents = readdirSync(extractedJavaDir);
+                const jdkDir =
+                    dirContents.find((name) => name.startsWith("jdk-")) ??
+                    dirContents[0];
+                const javaHomePath = join(extractedJavaDir, jdkDir);
 
-            const cachedJava = await cacheDir(
-                javaHomePath,
-                "java",
-                JAVA_VERSION,
-            );
+                cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
+                safeInfo(`Java installed at ${cachedJava}.`);
+            } else {
+                safeInfo(`Java ${JAVA_VERSION} found in tool-cache.`);
+            }
             addPath(join(cachedJava, "bin"));
-            safeInfo(`Java installed at ${cachedJava}.`);
         } else {
             safeInfo(`Java is already installed at ${javaPath}.`);
         }
@@ -98,47 +113,67 @@ export async function setupDependencies(): Promise<void> {
         // Setup Kind
         const kindPath = await which("kind", false);
         if (!kindPath) {
-            safeInfo(`Downloading Kind ${KIND_VERSION}...`);
-            const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedKind}`);
-            const cachedKind = await cacheFile(
-                downloadedKind,
-                "kind",
-                "kind",
-                KIND_VERSION,
-            );
+            let cachedKind = find("kind", KIND_VERSION);
+            if (!cachedKind) {
+                safeInfo(`Downloading Kind ${KIND_VERSION}...`);
+                const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedKind}`);
+                cachedKind = await cacheFile(
+                    downloadedKind,
+                    "kind",
+                    "kind",
+                    KIND_VERSION,
+                );
+            } else {
+                safeInfo(`Kind ${KIND_VERSION} found in tool-cache.`);
+            }
             addPath(cachedKind);
+        } else {
+            safeInfo(`Kind is already installed at ${kindPath}.`);
         }
 
         // Setup kubectl
         const kubectlPath = await which("kubectl", false);
         if (!kubectlPath) {
-            safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
-            const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedKubectl}`);
-            const cachedKubectl = await cacheFile(
-                downloadedKubectl,
-                "kubectl",
-                "kubectl",
-                KUBECTL_VERSION,
-            );
+            let cachedKubectl = find("kubectl", KUBECTL_VERSION);
+            if (!cachedKubectl) {
+                safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
+                const downloadedKubectl =
+                    await downloadTool(KUBECTL_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedKubectl}`);
+                cachedKubectl = await cacheFile(
+                    downloadedKubectl,
+                    "kubectl",
+                    "kubectl",
+                    KUBECTL_VERSION,
+                );
+            } else {
+                safeInfo(`kubectl ${KUBECTL_VERSION} found in tool-cache.`);
+            }
             addPath(cachedKubectl);
+        } else {
+            safeInfo(`kubectl is already installed at ${kubectlPath}.`);
         }
 
         // Setup jq
         const jqPath = await which("jq", false);
         if (!jqPath) {
-            safeInfo(`Downloading jq ${JQ_VERSION}...`);
-            const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedJq}`);
-            const cachedJq = await cacheFile(
-                downloadedJq,
-                "jq",
-                "jq",
-                JQ_VERSION,
-            );
+            let cachedJq = find("jq", JQ_VERSION);
+            if (!cachedJq) {
+                safeInfo(`Downloading jq ${JQ_VERSION}...`);
+                const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedJq}`);
+                cachedJq = await cacheFile(
+                    downloadedJq,
+                    "jq",
+                    "jq",
+                    JQ_VERSION,
+                );
+                safeInfo("jq installed successfully.");
+            } else {
+                safeInfo(`jq ${JQ_VERSION} found in tool-cache.`);
+            }
             addPath(cachedJq);
-            safeInfo("jq installed successfully.");
         } else {
             safeInfo(`jq is already installed at ${jqPath}.`);
         }
@@ -146,26 +181,27 @@ export async function setupDependencies(): Promise<void> {
         // Setup Node.js / npm
         const npmPath = await which("npm", false);
         if (!npmPath) {
-            safeInfo(
-                "Installing Node.js (includes npm) via official tarball...",
-            );
-            const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
-            const extractedNodeDir = await extractTar(
-                downloadedNode,
-                undefined,
-                ["xJ"],
-            );
+            let cachedNode = find("node", NODE_VERSION);
+            if (!cachedNode) {
+                safeInfo(
+                    "Installing Node.js (includes npm) via official tarball...",
+                );
+                const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
+                const extractedNodeDir = await extractTar(
+                    downloadedNode,
+                    undefined,
+                    ["xJ"],
+                );
 
-            const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
-            const nodeHomePath = join(extractedNodeDir, nodeDir);
+                const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
+                const nodeHomePath = join(extractedNodeDir, nodeDir);
 
-            const cachedNode = await cacheDir(
-                nodeHomePath,
-                "node",
-                NODE_VERSION,
-            );
+                cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
+                safeInfo("Node.js and npm installed successfully.");
+            } else {
+                safeInfo(`Node.js ${NODE_VERSION} found in tool-cache.`);
+            }
             addPath(join(cachedNode, "bin"));
-            safeInfo("Node.js and npm installed successfully.");
         } else {
             safeInfo(`npm is already installed at ${npmPath}.`);
         }

@@ -34259,7 +34259,7 @@ function find(toolName, versionSpec, arch) {
     if (!versionSpec) {
         throw new Error('versionSpec parameter is required');
     }
-    arch = arch || os.arch();
+    arch = arch || external_os_namespaceObject.arch();
     // attempt to resolve an explicit version
     if (!isExplicitVersion(versionSpec)) {
         const localVersions = findAllVersions(toolName, arch);
@@ -34269,15 +34269,15 @@ function find(toolName, versionSpec, arch) {
     // check for the explicit version in the cache
     let toolPath = '';
     if (versionSpec) {
-        versionSpec = semver.clean(versionSpec) || '';
-        const cachePath = path.join(_getCacheDirectory(), toolName, versionSpec, arch);
-        core.debug(`checking cache: ${cachePath}`);
-        if (fs.existsSync(cachePath) && fs.existsSync(`${cachePath}.complete`)) {
-            core.debug(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
+        versionSpec = node_modules_semver.clean(versionSpec) || '';
+        const cachePath = external_path_namespaceObject.join(_getCacheDirectory(), toolName, versionSpec, arch);
+        core_debug(`checking cache: ${cachePath}`);
+        if (external_fs_namespaceObject.existsSync(cachePath) && external_fs_namespaceObject.existsSync(`${cachePath}.complete`)) {
+            core_debug(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
             toolPath = cachePath;
         }
         else {
-            core.debug('not found');
+            core_debug('not found');
         }
     }
     return toolPath;
@@ -34290,14 +34290,14 @@ function find(toolName, versionSpec, arch) {
  */
 function findAllVersions(toolName, arch) {
     const versions = [];
-    arch = arch || os.arch();
-    const toolPath = path.join(_getCacheDirectory(), toolName);
-    if (fs.existsSync(toolPath)) {
-        const children = fs.readdirSync(toolPath);
+    arch = arch || external_os_namespaceObject.arch();
+    const toolPath = external_path_namespaceObject.join(_getCacheDirectory(), toolName);
+    if (external_fs_namespaceObject.existsSync(toolPath)) {
+        const children = external_fs_namespaceObject.readdirSync(toolPath);
         for (const child of children) {
             if (isExplicitVersion(child)) {
-                const fullPath = path.join(toolPath, child, arch || '');
-                if (fs.existsSync(fullPath) && fs.existsSync(`${fullPath}.complete`)) {
+                const fullPath = external_path_namespaceObject.join(toolPath, child, arch || '');
+                if (external_fs_namespaceObject.existsSync(fullPath) && external_fs_namespaceObject.existsSync(`${fullPath}.complete`)) {
                     versions.push(child);
                 }
             }
@@ -34381,10 +34381,10 @@ function _completeToolPath(tool, version, arch) {
  * @param versionSpec      version string to check
  */
 function isExplicitVersion(versionSpec) {
-    const c = semver.clean(versionSpec) || '';
-    core.debug(`isExplicit: ${c}`);
-    const valid = semver.valid(c) != null;
-    core.debug(`explicit? ${valid}`);
+    const c = node_modules_semver.clean(versionSpec) || '';
+    core_debug(`isExplicit: ${c}`);
+    const valid = node_modules_semver.valid(c) != null;
+    core_debug(`explicit? ${valid}`);
     return valid;
 }
 /**
@@ -34395,26 +34395,26 @@ function isExplicitVersion(versionSpec) {
  */
 function evaluateVersions(versions, versionSpec) {
     let version = '';
-    core.debug(`evaluating ${versions.length} versions`);
+    core_debug(`evaluating ${versions.length} versions`);
     versions = versions.sort((a, b) => {
-        if (semver.gt(a, b)) {
+        if (node_modules_semver.gt(a, b)) {
             return 1;
         }
         return -1;
     });
     for (let i = versions.length - 1; i >= 0; i--) {
         const potential = versions[i];
-        const satisfied = semver.satisfies(potential, versionSpec);
+        const satisfied = node_modules_semver.satisfies(potential, versionSpec);
         if (satisfied) {
             version = potential;
             break;
         }
     }
     if (version) {
-        core.debug(`matched: ${version}`);
+        core_debug(`matched: ${version}`);
     }
     else {
-        core.debug('match not found');
+        core_debug('match not found');
     }
     return version;
 }
@@ -34692,12 +34692,18 @@ async function setupDependencies() {
         // Setup Python 3
         const pythonPath = (await which("python3", false)) || (await which("python", false));
         if (!pythonPath) {
-            safeInfo("Installing Python 3.12 via python-build-standalone...");
-            const downloadedPython = await downloadTool(PYTHON_DOWNLOAD_URL);
-            const extractedPythonDir = await extractTar(downloadedPython);
-            const cachedPython = await cacheDir((0,external_path_namespaceObject.join)(extractedPythonDir, "python"), "python", PYTHON_VERSION);
+            let cachedPython = find("python", PYTHON_VERSION);
+            if (!cachedPython) {
+                safeInfo(`Installing Python ${PYTHON_VERSION} via python-build-standalone...`);
+                const downloadedPython = await downloadTool(PYTHON_DOWNLOAD_URL);
+                const extractedPythonDir = await extractTar(downloadedPython);
+                cachedPython = await cacheDir((0,external_path_namespaceObject.join)(extractedPythonDir, "python"), "python", PYTHON_VERSION);
+                safeInfo("Python installed successfully.");
+            }
+            else {
+                safeInfo(`Python ${PYTHON_VERSION} found in tool-cache.`);
+            }
             addPath((0,external_path_namespaceObject.join)(cachedPython, "bin"));
-            safeInfo("Python installed successfully.");
         }
         else {
             safeInfo(`Python is already installed at ${pythonPath}.`);
@@ -34705,12 +34711,18 @@ async function setupDependencies() {
         // Setup wget
         const wgetPath = await which("wget", false);
         if (!wgetPath) {
-            safeInfo("Installing wget via static binary...");
-            const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedWget}`);
-            const cachedWget = await cacheFile(downloadedWget, "wget", "wget", WGET_VERSION);
+            let cachedWget = find("wget", WGET_VERSION);
+            if (!cachedWget) {
+                safeInfo("Installing wget via static binary...");
+                const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedWget}`);
+                cachedWget = await cacheFile(downloadedWget, "wget", "wget", WGET_VERSION);
+                safeInfo("wget installed successfully.");
+            }
+            else {
+                safeInfo(`wget ${WGET_VERSION} found in tool-cache.`);
+            }
             addPath(cachedWget);
-            safeInfo("wget installed successfully.");
         }
         else {
             safeInfo(`wget is already installed at ${wgetPath}.`);
@@ -34718,17 +34730,23 @@ async function setupDependencies() {
         // Setup Java 21 (Adoptium Temurin)
         const javaPath = await which("java", false);
         if (!javaPath) {
-            safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
-            const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
-            const extractedJavaDir = await extractTar(downloadedJava);
-            // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-            const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
-            const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
-                dirContents[0];
-            const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
-            const cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
+            let cachedJava = find("java", JAVA_VERSION);
+            if (!cachedJava) {
+                safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
+                const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
+                const extractedJavaDir = await extractTar(downloadedJava);
+                // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
+                const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
+                const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
+                    dirContents[0];
+                const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
+                cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
+                safeInfo(`Java installed at ${cachedJava}.`);
+            }
+            else {
+                safeInfo(`Java ${JAVA_VERSION} found in tool-cache.`);
+            }
             addPath((0,external_path_namespaceObject.join)(cachedJava, "bin"));
-            safeInfo(`Java installed at ${cachedJava}.`);
         }
         else {
             safeInfo(`Java is already installed at ${javaPath}.`);
@@ -34736,30 +34754,54 @@ async function setupDependencies() {
         // Setup Kind
         const kindPath = await which("kind", false);
         if (!kindPath) {
-            safeInfo(`Downloading Kind ${KIND_VERSION}...`);
-            const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedKind}`);
-            const cachedKind = await cacheFile(downloadedKind, "kind", "kind", KIND_VERSION);
+            let cachedKind = find("kind", KIND_VERSION);
+            if (!cachedKind) {
+                safeInfo(`Downloading Kind ${KIND_VERSION}...`);
+                const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedKind}`);
+                cachedKind = await cacheFile(downloadedKind, "kind", "kind", KIND_VERSION);
+            }
+            else {
+                safeInfo(`Kind ${KIND_VERSION} found in tool-cache.`);
+            }
             addPath(cachedKind);
+        }
+        else {
+            safeInfo(`Kind is already installed at ${kindPath}.`);
         }
         // Setup kubectl
         const kubectlPath = await which("kubectl", false);
         if (!kubectlPath) {
-            safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
-            const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedKubectl}`);
-            const cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
+            let cachedKubectl = find("kubectl", KUBECTL_VERSION);
+            if (!cachedKubectl) {
+                safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
+                const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedKubectl}`);
+                cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
+            }
+            else {
+                safeInfo(`kubectl ${KUBECTL_VERSION} found in tool-cache.`);
+            }
             addPath(cachedKubectl);
+        }
+        else {
+            safeInfo(`kubectl is already installed at ${kubectlPath}.`);
         }
         // Setup jq
         const jqPath = await which("jq", false);
         if (!jqPath) {
-            safeInfo(`Downloading jq ${JQ_VERSION}...`);
-            const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
-            await runCommand(`chmod +x ${downloadedJq}`);
-            const cachedJq = await cacheFile(downloadedJq, "jq", "jq", JQ_VERSION);
+            let cachedJq = find("jq", JQ_VERSION);
+            if (!cachedJq) {
+                safeInfo(`Downloading jq ${JQ_VERSION}...`);
+                const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
+                await runCommand(`chmod +x ${downloadedJq}`);
+                cachedJq = await cacheFile(downloadedJq, "jq", "jq", JQ_VERSION);
+                safeInfo("jq installed successfully.");
+            }
+            else {
+                safeInfo(`jq ${JQ_VERSION} found in tool-cache.`);
+            }
             addPath(cachedJq);
-            safeInfo("jq installed successfully.");
         }
         else {
             safeInfo(`jq is already installed at ${jqPath}.`);
@@ -34767,14 +34809,20 @@ async function setupDependencies() {
         // Setup Node.js / npm
         const npmPath = await which("npm", false);
         if (!npmPath) {
-            safeInfo("Installing Node.js (includes npm) via official tarball...");
-            const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
-            const extractedNodeDir = await extractTar(downloadedNode, undefined, ["xJ"]);
-            const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
-            const nodeHomePath = (0,external_path_namespaceObject.join)(extractedNodeDir, nodeDir);
-            const cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
+            let cachedNode = find("node", NODE_VERSION);
+            if (!cachedNode) {
+                safeInfo("Installing Node.js (includes npm) via official tarball...");
+                const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
+                const extractedNodeDir = await extractTar(downloadedNode, undefined, ["xJ"]);
+                const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
+                const nodeHomePath = (0,external_path_namespaceObject.join)(extractedNodeDir, nodeDir);
+                cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
+                safeInfo("Node.js and npm installed successfully.");
+            }
+            else {
+                safeInfo(`Node.js ${NODE_VERSION} found in tool-cache.`);
+            }
             addPath((0,external_path_namespaceObject.join)(cachedNode, "bin"));
-            safeInfo("Node.js and npm installed successfully.");
         }
         else {
             safeInfo(`npm is already installed at ${npmPath}.`);
