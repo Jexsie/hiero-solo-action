@@ -7,7 +7,7 @@ import {
     extractTar,
     cacheDir,
 } from "@actions/tool-cache";
-import { readdirSync } from "fs";
+import { promises as fs } from "fs";
 import { join } from "path";
 import { safeInfo, runCommand, safeExec, isVersionGte } from "./utils.js";
 import {
@@ -94,7 +94,7 @@ export async function setupDependencies(): Promise<void> {
                 const extractedJavaDir = await extractTar(downloadedJava);
 
                 // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-                const dirContents = readdirSync(extractedJavaDir);
+                const dirContents = await fs.readdir(extractedJavaDir);
                 const jdkDir =
                     dirContents.find((name) => name.startsWith("jdk-")) ??
                     dirContents[0];
@@ -207,7 +207,8 @@ export async function setupDependencies(): Promise<void> {
         }
 
         // Install Solo CLI
-        const soloVersion = getInput("soloVersion") || "latest";
+        const inputSoloVersion = getInput("soloVersion");
+        const soloVersion = inputSoloVersion ? inputSoloVersion : "latest";
         safeInfo(`Installing Solo CLI version: ${soloVersion}`);
         await runCommand(`npm install -g @hashgraph/solo@${soloVersion}`);
 

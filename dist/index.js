@@ -34736,7 +34736,7 @@ async function setupDependencies() {
                 const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
                 const extractedJavaDir = await extractTar(downloadedJava);
                 // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-                const dirContents = (0,external_fs_namespaceObject.readdirSync)(extractedJavaDir);
+                const dirContents = await external_fs_namespaceObject.promises.readdir(extractedJavaDir);
                 const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
                     dirContents[0];
                 const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
@@ -34828,7 +34828,8 @@ async function setupDependencies() {
             safeInfo(`npm is already installed at ${npmPath}.`);
         }
         // Install Solo CLI
-        const soloVersion = getInput("soloVersion") || "latest";
+        const inputSoloVersion = getInput("soloVersion");
+        const soloVersion = inputSoloVersion ? inputSoloVersion : "latest";
         safeInfo(`Installing Solo CLI version: ${soloVersion}`);
         await runCommand(`npm install -g @hashgraph/solo@${soloVersion}`);
         safeInfo("✅ All dependencies installed successfully.");
