@@ -31086,7 +31086,54 @@ function isVersionGte(version, target) {
     return aPatch >= bPatch;
 }
 
+;// CONCATENATED MODULE: ./src/constants.ts
+// ---------------------------------------------------------------------------
+// Solo infrastructure constants
+// ---------------------------------------------------------------------------
+/** Name of the kind cluster created by the action */
+const CLUSTER_NAME = "solo-e2e";
+/** Kubernetes namespace used for the Solo deployment */
+const NAMESPACE = "solo";
+/** Name of the Solo deployment */
+const DEPLOYMENT_NAME = "solo-deployment";
+// Default port numbers (used as fallbacks when action inputs are not provided)
+const DEFAULT_HAPROXY_PORT = "50211";
+const DEFAULT_GRPC_PROXY_PORT = "9998";
+const DEFAULT_DUAL_MODE_GRPC_PROXY_PORT = "9999";
+const DEFAULT_MIRROR_NODE_PORT_REST = "5551";
+const DEFAULT_MIRROR_NODE_PORT_GRPC = "5600";
+const DEFAULT_MIRROR_NODE_PORT_WEB3 = "8545";
+const DEFAULT_JAVA_REST_API_PORT = "8084";
+const DEFAULT_RELAY_PORT = "7546";
+const DEFAULT_HBAR_AMOUNT = "10000000";
+// Internal target ports (the ports services listen on inside the cluster)
+const HAPROXY_INTERNAL_PORT = "50211";
+const HAPROXY_NODE2_EXTERNAL_PORT = "51211";
+const GRPC_PROXY_INTERNAL_PORT = "8080";
+const MIRROR_NODE_REST_INTERNAL_PORT = "80";
+const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
+const RELAY_INTERNAL_PORT = "7546";
+// ---------------------------------------------------------------------------
+// Tooling constants
+// ---------------------------------------------------------------------------
+const PYTHON_VERSION = "3.12.9";
+const PYTHON_RELEASE_TAG = "20250409";
+const PYTHON_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`));
+const WGET_VERSION = "1.25.0";
+const WGET_DOWNLOAD_URL = "https://github.com/userdocs/qbt-workflow-files/releases/latest/download/wget";
+const JAVA_VERSION = "21.0.6";
+const JAVA_DOWNLOAD_URL = "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk";
+const KIND_VERSION = "v0.29.0";
+const KIND_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`));
+const KUBECTL_VERSION = "v1.32.2";
+const KUBECTL_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`));
+const JQ_VERSION = "1.7.1";
+const JQ_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`));
+const NODE_VERSION = "24.0.1";
+const NODE_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`));
+
 ;// CONCATENATED MODULE: ./src/post.ts
+
 
 
 
@@ -31100,11 +31147,7 @@ function isVersionGte(version, target) {
  * (e.g. "A deployment named solo-deployment already exists").
  */
 async function cleanup() {
-    const clusterName = getState("clusterName");
-    if (!clusterName) {
-        safeInfo("[cleanup] No cluster name found in state, skipping cleanup");
-        return;
-    }
+    const clusterName = getState("clusterName") || CLUSTER_NAME;
     safeInfo(`[cleanup] Starting cleanup for cluster: ${clusterName}`);
     // Deletes the kind cluster
     try {
@@ -31124,17 +31167,6 @@ async function cleanup() {
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         warning(`[cleanup] Failed to remove Solo config directory: ${message}`);
-    }
-    // Prune leftover Docker resources (containers, networks, volumes)
-    try {
-        await runCommand("docker system prune -af --volumes", {
-            ignoreReturnCode: true,
-        });
-        safeInfo("[cleanup] Docker resources pruned successfully");
-    }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        warning(`[cleanup] Failed to prune Docker resources: ${message}`);
     }
 }
 async function main() {
