@@ -1,4 +1,4 @@
-import { getInput, info, setOutput } from "@actions/core";
+import { getInput, info, setFailed, setOutput } from "@actions/core";
 import { exec } from "@actions/exec";
 import { spawn } from "child_process";
 import { readFileSync } from "fs";
@@ -44,6 +44,18 @@ export function safeSetOutput(name: string, value: string): void {
         const errorMessage =
             error instanceof Error ? error.message : String(error);
         info(`Failed to set output ${name}: ${errorMessage}`);
+    }
+}
+
+/**
+ * Safely sets failed state with proper error handling
+ */
+export function safeSetFailed(message: string): void {
+    try {
+        setFailed(message);
+    } catch {
+        console.error(`Failed to set failed state: ${message}`);
+        process.exit(1);
     }
 }
 

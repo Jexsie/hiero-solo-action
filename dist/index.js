@@ -34499,6 +34499,18 @@ function safeSetOutput(name, value) {
     }
 }
 /**
+ * Safely sets failed state with proper error handling
+ */
+function safeSetFailed(message) {
+    try {
+        setFailed(message);
+    }
+    catch {
+        console.error(`Failed to set failed state: ${message}`);
+        process.exit(1);
+    }
+}
+/**
  * Safely logs info with proper error handling
  * @param message - The message to log
  */
@@ -35185,18 +35197,6 @@ async function createAccount(type, soloGe0440) {
         throw new Error(`Failed to create ${type} account: ${errorMessage}`, {
             cause: error,
         });
-    }
-}
-/**
- * Safely sets failed state with proper error handling
- */
-function safeSetFailed(message) {
-    try {
-        setFailed(message);
-    }
-    catch {
-        console.error(`Failed to set failed state: ${message}`);
-        process.exit(1);
     }
 }
 /**

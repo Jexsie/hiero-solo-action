@@ -1,4 +1,4 @@
-import { setFailed, saveState } from "@actions/core";
+import { saveState } from "@actions/core";
 import { setupDependencies, checkSoloVersion } from "./setup.js";
 import {
     soloRun,
@@ -9,6 +9,7 @@ import {
     portForwardIfExists,
     extractAccountAsJson,
     safeInfo,
+    safeSetFailed,
 } from "./utils.js";
 import {
     CLUSTER_NAME,
@@ -571,18 +572,6 @@ async function createAccount(
         throw new Error(`Failed to create ${type} account: ${errorMessage}`, {
             cause: error,
         });
-    }
-}
-
-/**
- * Safely sets failed state with proper error handling
- */
-function safeSetFailed(message: string): void {
-    try {
-        setFailed(message);
-    } catch {
-        console.error(`Failed to set failed state: ${message}`);
-        process.exit(1);
     }
 }
 
