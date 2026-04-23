@@ -13,7 +13,8 @@ import { rmSync } from "fs";
  * (e.g. "A deployment named solo-deployment already exists").
  */
 async function cleanup(): Promise<void> {
-    const clusterName = getState("clusterName") || CLUSTER_NAME;
+    const savedClusterName = getState("clusterName");
+    const clusterName = savedClusterName ?? CLUSTER_NAME;
 
     safeInfo(`[cleanup] Starting cleanup for cluster: ${clusterName}`);
 

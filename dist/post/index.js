@@ -31015,7 +31015,7 @@ async function safeExec(command, args, options) {
  * @param options - Optional execution options
  */
 async function runCommand(commandStr, options) {
-    const matches = commandStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    const matches = commandStr.match(/[^\s"']+|"[^"]*"|'[^']*'/g) ?? [];
     if (matches.length === 0)
         return 0;
     const command = matches[0];
@@ -31159,7 +31159,8 @@ const NODE_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https
  * (e.g. "A deployment named solo-deployment already exists").
  */
 async function cleanup() {
-    const clusterName = getState("clusterName") || CLUSTER_NAME;
+    const savedClusterName = getState("clusterName");
+    const clusterName = savedClusterName ?? CLUSTER_NAME;
     safeInfo(`[cleanup] Starting cleanup for cluster: ${clusterName}`);
     // Deletes the kind cluster
     try {

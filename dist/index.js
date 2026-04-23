@@ -34545,7 +34545,7 @@ async function safeExec(command, args, options) {
  * @param options - Optional execution options
  */
 async function runCommand(commandStr, options) {
-    const matches = commandStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    const matches = commandStr.match(/[^\s"']+|"[^"]*"|'[^']*'/g) ?? [];
     if (matches.length === 0)
         return 0;
     const command = matches[0];
