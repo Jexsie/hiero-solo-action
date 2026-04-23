@@ -9,7 +9,7 @@ export default tseslint.config(
         ignores: ["dist/**", "node_modules/**"],
     },
     js.configs.recommended,
-    ...tseslint.configs.recommended,
+    ...tseslint.configs.recommendedTypeChecked,
 
     /*************** Prettier plugin (reports formatting as errors) *******/
     {
@@ -21,13 +21,22 @@ export default tseslint.config(
 
     /***************** TypeScript rules *******************/
     {
+        files: ["**/*.ts"],
         languageOptions: {
             globals: globals.node,
+            parserOptions: {
+                projectService: true,
+                tsconfigRootDir: import.meta.dirname,
+            },
         },
         rules: {
             "@typescript-eslint/no-unused-vars": "error",
             "@typescript-eslint/no-explicit-any": "error",
         },
+    },
+    {
+        files: ["**/*.js"],
+        ...tseslint.configs.disableTypeChecked,
     },
     eslintConfigPrettier,
 );
