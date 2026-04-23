@@ -105,10 +105,10 @@ export async function runCommand(
     commandStr: string,
     options?: Parameters<typeof exec>[2],
 ): Promise<number> {
-    const matches = commandStr.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    const matches = commandStr.match(/[^\s"']+|"[^"]*"|'[^']*'/g) ?? [];
     if (matches.length === 0) return 0;
 
-    const command = matches[0] as string;
+    const command = matches[0]!;
     const args = matches.slice(1).map((arg) => {
         // Strip surrounding quotes if present
         if (
