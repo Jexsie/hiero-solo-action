@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc && ncc build src/index.ts -o dist && ncc build src/post.ts -o dist/post",
-    "lint": "eslint .",
+    "lint": "eslint . --fix",
     "prepare": "husky"
   },
   "repository": {
