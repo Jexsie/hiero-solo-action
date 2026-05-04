@@ -34958,6 +34958,26 @@ async function setupSoloCluster(clusterName, soloGe0440) {
     }
 }
 /**
+ * Optionally deploys a block node before the consensus network is deployed.
+ * The block node is deployed after cluster setup but before the consensus
+ * network.
+ */
+async function deployBlockNode(clusterName, deployment, hieroVersion) {
+    const installBlockNode = safeGetInput("installBlockNode") === "true";
+    if (!installBlockNode)
+        return;
+    safeInfo(`[deployBlockNode] Deploying block node for cluster=${clusterName}, deployment=${deployment}, version=${hieroVersion}`);
+    try {
+        await soloRun(`solo block node add --cluster-ref kind-${clusterName} --deployment ${deployment} --release-tag ${hieroVersion} --dev`);
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to deploy block node: ${errorMessage}`, {
+            cause: error,
+        });
+    }
+}
+/**
  * Deploys the network
  */
 async function deployNetwork(deployment, nodeIds, hieroVersion, soloGe0440) {
@@ -35062,6 +35082,8 @@ async function deploySoloTestNetwork(soloGe0440) {
         await addClusterToDeployment(DEPLOYMENT_NAME, CLUSTER_NAME, numNodes, soloGe0440);
         await generateNodeKeys(DEPLOYMENT_NAME, nodeIds, soloGe0440);
         await setupSoloCluster(CLUSTER_NAME, soloGe0440);
+        // Optionally deploy a block node before the consensus network is deployed.
+        await deployBlockNode(CLUSTER_NAME, DEPLOYMENT_NAME, hieroVersion);
         await deployNetwork(DEPLOYMENT_NAME, nodeIds, hieroVersion, soloGe0440);
         await setupNode(DEPLOYMENT_NAME, nodeIds, hieroVersion, soloGe0440);
         await startNode(DEPLOYMENT_NAME, nodeIds, soloGe0440);
