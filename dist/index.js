@@ -30704,6 +30704,464 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
 /************************************************************************/
 var __webpack_exports__ = {};
 
+// EXTERNAL MODULE: external "assert"
+var external_assert_ = __nccwpck_require__(2613);
+;// CONCATENATED MODULE: external "path"
+const external_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("path");
+;// CONCATENATED MODULE: external "fs"
+const external_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+io@3.0.2/node_modules/@actions/io/lib/io-util.js
+var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+
+
+const { chmod, copyFile, lstat, mkdir, open: io_util_open, readdir, rename, rm, rmdir, stat, symlink, unlink } = external_fs_namespaceObject.promises;
+// export const {open} = 'fs'
+const IS_WINDOWS = process.platform === 'win32';
+/**
+ * Custom implementation of readlink to ensure Windows junctions
+ * maintain trailing backslash for backward compatibility with Node.js < 24
+ *
+ * In Node.js 20, Windows junctions (directory symlinks) always returned paths
+ * with trailing backslashes. Node.js 24 removed this behavior, which breaks
+ * code that relied on this format for path operations.
+ *
+ * This implementation restores the Node 20 behavior by adding a trailing
+ * backslash to all junction results on Windows.
+ */
+function readlink(fsPath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const result = yield external_fs_namespaceObject.promises.readlink(fsPath);
+        // On Windows, restore Node 20 behavior: add trailing backslash to all results
+        // since junctions on Windows are always directory links
+        if (IS_WINDOWS && !result.endsWith('\\')) {
+            return `${result}\\`;
+        }
+        return result;
+    });
+}
+// See https://github.com/nodejs/node/blob/d0153aee367422d0858105abec186da4dff0a0c5/deps/uv/include/uv/win.h#L691
+const UV_FS_O_EXLOCK = 0x10000000;
+const READONLY = external_fs_namespaceObject.constants.O_RDONLY;
+function exists(fsPath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            yield stat(fsPath);
+        }
+        catch (err) {
+            if (err.code === 'ENOENT') {
+                return false;
+            }
+            throw err;
+        }
+        return true;
+    });
+}
+function isDirectory(fsPath_1) {
+    return __awaiter(this, arguments, void 0, function* (fsPath, useStat = false) {
+        const stats = useStat ? yield stat(fsPath) : yield lstat(fsPath);
+        return stats.isDirectory();
+    });
+}
+/**
+ * On OSX/Linux, true if path starts with '/'. On Windows, true for paths like:
+ * \, \hello, \\hello\share, C:, and C:\hello (and corresponding alternate separator cases).
+ */
+function isRooted(p) {
+    p = normalizeSeparators(p);
+    if (!p) {
+        throw new Error('isRooted() parameter "p" cannot be empty');
+    }
+    if (IS_WINDOWS) {
+        return (p.startsWith('\\') || /^[A-Z]:/i.test(p) // e.g. \ or \hello or \\hello
+        ); // e.g. C: or C:\hello
+    }
+    return p.startsWith('/');
+}
+/**
+ * Best effort attempt to determine whether a file exists and is executable.
+ * @param filePath    file path to check
+ * @param extensions  additional file extensions to try
+ * @return if file exists and is executable, returns the file path. otherwise empty string.
+ */
+function tryGetExecutablePath(filePath, extensions) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let stats = undefined;
+        try {
+            // test file exists
+            stats = yield stat(filePath);
+        }
+        catch (err) {
+            if (err.code !== 'ENOENT') {
+                // eslint-disable-next-line no-console
+                console.log(`Unexpected error attempting to determine if executable file exists '${filePath}': ${err}`);
+            }
+        }
+        if (stats && stats.isFile()) {
+            if (IS_WINDOWS) {
+                // on Windows, test for valid extension
+                const upperExt = external_path_namespaceObject.extname(filePath).toUpperCase();
+                if (extensions.some(validExt => validExt.toUpperCase() === upperExt)) {
+                    return filePath;
+                }
+            }
+            else {
+                if (isUnixExecutable(stats)) {
+                    return filePath;
+                }
+            }
+        }
+        // try each extension
+        const originalFilePath = filePath;
+        for (const extension of extensions) {
+            filePath = originalFilePath + extension;
+            stats = undefined;
+            try {
+                stats = yield stat(filePath);
+            }
+            catch (err) {
+                if (err.code !== 'ENOENT') {
+                    // eslint-disable-next-line no-console
+                    console.log(`Unexpected error attempting to determine if executable file exists '${filePath}': ${err}`);
+                }
+            }
+            if (stats && stats.isFile()) {
+                if (IS_WINDOWS) {
+                    // preserve the case of the actual file (since an extension was appended)
+                    try {
+                        const directory = external_path_namespaceObject.dirname(filePath);
+                        const upperName = external_path_namespaceObject.basename(filePath).toUpperCase();
+                        for (const actualName of yield readdir(directory)) {
+                            if (upperName === actualName.toUpperCase()) {
+                                filePath = external_path_namespaceObject.join(directory, actualName);
+                                break;
+                            }
+                        }
+                    }
+                    catch (err) {
+                        // eslint-disable-next-line no-console
+                        console.log(`Unexpected error attempting to determine the actual case of the file '${filePath}': ${err}`);
+                    }
+                    return filePath;
+                }
+                else {
+                    if (isUnixExecutable(stats)) {
+                        return filePath;
+                    }
+                }
+            }
+        }
+        return '';
+    });
+}
+function normalizeSeparators(p) {
+    p = p || '';
+    if (IS_WINDOWS) {
+        // convert slashes on Windows
+        p = p.replace(/\//g, '\\');
+        // remove redundant slashes
+        return p.replace(/\\\\+/g, '\\');
+    }
+    // remove redundant slashes
+    return p.replace(/\/\/+/g, '/');
+}
+// on Mac/Linux, test the execute bit
+//     R   W  X  R  W X R W X
+//   256 128 64 32 16 8 4 2 1
+function isUnixExecutable(stats) {
+    return ((stats.mode & 1) > 0 ||
+        ((stats.mode & 8) > 0 &&
+            process.getgid !== undefined &&
+            stats.gid === process.getgid()) ||
+        ((stats.mode & 64) > 0 &&
+            process.getuid !== undefined &&
+            stats.uid === process.getuid()));
+}
+// Get the path of cmd.exe in windows
+function getCmdPath() {
+    var _a;
+    return (_a = process.env['COMSPEC']) !== null && _a !== void 0 ? _a : `cmd.exe`;
+}
+//# sourceMappingURL=io-util.js.map
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+io@3.0.2/node_modules/@actions/io/lib/io.js
+var io_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+
+
+
+/**
+ * Copies a file or folder.
+ * Based off of shelljs - https://github.com/shelljs/shelljs/blob/9237f66c52e5daa40458f94f9565e18e8132f5a6/src/cp.js
+ *
+ * @param     source    source path
+ * @param     dest      destination path
+ * @param     options   optional. See CopyOptions.
+ */
+function io_cp(source_1, dest_1) {
+    return io_awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
+        const { force, recursive, copySourceDirectory } = readCopyOptions(options);
+        const destStat = (yield exists(dest)) ? yield stat(dest) : null;
+        // Dest is an existing file, but not forcing
+        if (destStat && destStat.isFile() && !force) {
+            return;
+        }
+        // If dest is an existing directory, should copy inside.
+        const newDest = destStat && destStat.isDirectory() && copySourceDirectory
+            ? external_path_namespaceObject.join(dest, external_path_namespaceObject.basename(source))
+            : dest;
+        if (!(yield exists(source))) {
+            throw new Error(`no such file or directory: ${source}`);
+        }
+        const sourceStat = yield stat(source);
+        if (sourceStat.isDirectory()) {
+            if (!recursive) {
+                throw new Error(`Failed to copy. ${source} is a directory, but tried to copy without recursive flag.`);
+            }
+            else {
+                yield cpDirRecursive(source, newDest, 0, force);
+            }
+        }
+        else {
+            if (external_path_namespaceObject.relative(source, newDest) === '') {
+                // a file cannot be copied to itself
+                throw new Error(`'${newDest}' and '${source}' are the same file`);
+            }
+            yield io_copyFile(source, newDest, force);
+        }
+    });
+}
+/**
+ * Moves a path.
+ *
+ * @param     source    source path
+ * @param     dest      destination path
+ * @param     options   optional. See MoveOptions.
+ */
+function mv(source_1, dest_1) {
+    return io_awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
+        if (yield ioUtil.exists(dest)) {
+            let destExists = true;
+            if (yield ioUtil.isDirectory(dest)) {
+                // If dest is directory copy src into dest
+                dest = path.join(dest, path.basename(source));
+                destExists = yield ioUtil.exists(dest);
+            }
+            if (destExists) {
+                if (options.force == null || options.force) {
+                    yield rmRF(dest);
+                }
+                else {
+                    throw new Error('Destination already exists');
+                }
+            }
+        }
+        yield mkdirP(path.dirname(dest));
+        yield ioUtil.rename(source, dest);
+    });
+}
+/**
+ * Remove a path recursively with force
+ *
+ * @param inputPath path to remove
+ */
+function rmRF(inputPath) {
+    return io_awaiter(this, void 0, void 0, function* () {
+        if (IS_WINDOWS) {
+            // Check for invalid characters
+            // https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
+            if (/[*"<>|]/.test(inputPath)) {
+                throw new Error('File path must not contain `*`, `"`, `<`, `>` or `|` on Windows');
+            }
+        }
+        try {
+            // note if path does not exist, error is silent
+            yield rm(inputPath, {
+                force: true,
+                maxRetries: 3,
+                recursive: true,
+                retryDelay: 300
+            });
+        }
+        catch (err) {
+            throw new Error(`File was unable to be removed ${err}`);
+        }
+    });
+}
+/**
+ * Make a directory.  Creates the full path with folders in between
+ * Will throw if it fails
+ *
+ * @param   fsPath        path to create
+ * @returns Promise<void>
+ */
+function mkdirP(fsPath) {
+    return io_awaiter(this, void 0, void 0, function* () {
+        (0,external_assert_.ok)(fsPath, 'a path argument must be provided');
+        yield mkdir(fsPath, { recursive: true });
+    });
+}
+/**
+ * Returns path of a tool had the tool actually been invoked.  Resolves via paths.
+ * If you check and the tool does not exist, it will throw.
+ *
+ * @param     tool              name of the tool
+ * @param     check             whether to check if tool exists
+ * @returns   Promise<string>   path to tool
+ */
+function which(tool, check) {
+    return io_awaiter(this, void 0, void 0, function* () {
+        if (!tool) {
+            throw new Error("parameter 'tool' is required");
+        }
+        // recursive when check=true
+        if (check) {
+            const result = yield which(tool, false);
+            if (!result) {
+                if (IS_WINDOWS) {
+                    throw new Error(`Unable to locate executable file: ${tool}. Please verify either the file path exists or the file can be found within a directory specified by the PATH environment variable. Also verify the file has a valid extension for an executable file.`);
+                }
+                else {
+                    throw new Error(`Unable to locate executable file: ${tool}. Please verify either the file path exists or the file can be found within a directory specified by the PATH environment variable. Also check the file mode to verify the file is executable.`);
+                }
+            }
+            return result;
+        }
+        const matches = yield findInPath(tool);
+        if (matches && matches.length > 0) {
+            return matches[0];
+        }
+        return '';
+    });
+}
+/**
+ * Returns a list of all occurrences of the given tool on the system path.
+ *
+ * @returns   Promise<string[]>  the paths of the tool
+ */
+function findInPath(tool) {
+    return io_awaiter(this, void 0, void 0, function* () {
+        if (!tool) {
+            throw new Error("parameter 'tool' is required");
+        }
+        // build the list of extensions to try
+        const extensions = [];
+        if (IS_WINDOWS && process.env['PATHEXT']) {
+            for (const extension of process.env['PATHEXT'].split(external_path_namespaceObject.delimiter)) {
+                if (extension) {
+                    extensions.push(extension);
+                }
+            }
+        }
+        // if it's rooted, return it if exists. otherwise return empty.
+        if (isRooted(tool)) {
+            const filePath = yield tryGetExecutablePath(tool, extensions);
+            if (filePath) {
+                return [filePath];
+            }
+            return [];
+        }
+        // if any path separators, return empty
+        if (tool.includes(external_path_namespaceObject.sep)) {
+            return [];
+        }
+        // build the list of directories
+        //
+        // Note, technically "where" checks the current directory on Windows. From a toolkit perspective,
+        // it feels like we should not do this. Checking the current directory seems like more of a use
+        // case of a shell, and the which() function exposed by the toolkit should strive for consistency
+        // across platforms.
+        const directories = [];
+        if (process.env.PATH) {
+            for (const p of process.env.PATH.split(external_path_namespaceObject.delimiter)) {
+                if (p) {
+                    directories.push(p);
+                }
+            }
+        }
+        // find all matches
+        const matches = [];
+        for (const directory of directories) {
+            const filePath = yield tryGetExecutablePath(external_path_namespaceObject.join(directory, tool), extensions);
+            if (filePath) {
+                matches.push(filePath);
+            }
+        }
+        return matches;
+    });
+}
+function readCopyOptions(options) {
+    const force = options.force == null ? true : options.force;
+    const recursive = Boolean(options.recursive);
+    const copySourceDirectory = options.copySourceDirectory == null
+        ? true
+        : Boolean(options.copySourceDirectory);
+    return { force, recursive, copySourceDirectory };
+}
+function cpDirRecursive(sourceDir, destDir, currentDepth, force) {
+    return io_awaiter(this, void 0, void 0, function* () {
+        // Ensure there is not a run away recursive copy
+        if (currentDepth >= 255)
+            return;
+        currentDepth++;
+        yield mkdirP(destDir);
+        const files = yield readdir(sourceDir);
+        for (const fileName of files) {
+            const srcFile = `${sourceDir}/${fileName}`;
+            const destFile = `${destDir}/${fileName}`;
+            const srcFileStat = yield lstat(srcFile);
+            if (srcFileStat.isDirectory()) {
+                // Recurse
+                yield cpDirRecursive(srcFile, destFile, currentDepth, force);
+            }
+            else {
+                yield io_copyFile(srcFile, destFile, force);
+            }
+        }
+        // Change the mode for the newly created directory
+        yield chmod(destDir, (yield stat(sourceDir)).mode);
+    });
+}
+// Buffered file copy
+function io_copyFile(srcFile, destFile, force) {
+    return io_awaiter(this, void 0, void 0, function* () {
+        if ((yield lstat(srcFile)).isSymbolicLink()) {
+            // unlink/re-link it
+            try {
+                yield lstat(destFile);
+                yield unlink(destFile);
+            }
+            catch (e) {
+                // Try to override file permission
+                if (e.code === 'EPERM') {
+                    yield chmod(destFile, '0666');
+                    yield unlink(destFile);
+                }
+                // other errors = it doesn't exist, no work to do
+            }
+            // Copy over symlink
+            const symlinkFull = yield readlink(srcFile);
+            yield symlink(symlinkFull, destFile, IS_WINDOWS ? 'junction' : null);
+        }
+        else if (!(yield exists(destFile)) || force) {
+            yield copyFile(srcFile, destFile);
+        }
+    });
+}
+//# sourceMappingURL=io.js.map
 ;// CONCATENATED MODULE: external "os"
 const external_os_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("os");
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+core@3.0.0/node_modules/@actions/core/lib/utils.js
@@ -30836,8 +31294,6 @@ function escapeProperty(s) {
 //# sourceMappingURL=command.js.map
 ;// CONCATENATED MODULE: external "crypto"
 const external_crypto_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("crypto");
-;// CONCATENATED MODULE: external "fs"
-const external_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("fs");
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+core@3.0.0/node_modules/@actions/core/lib/file-command.js
 // For internal use, subject to change.
 // We use any as a valid input type
@@ -30873,8 +31329,6 @@ function file_command_prepareKeyValueMessage(key, value) {
     return `${key}<<${delimiter}${external_os_namespaceObject.EOL}${convertedValue}${external_os_namespaceObject.EOL}${delimiter}`;
 }
 //# sourceMappingURL=file-command.js.map
-;// CONCATENATED MODULE: external "path"
-const external_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("path");
 // EXTERNAL MODULE: external "http"
 var external_http_ = __nccwpck_require__(8611);
 var external_http_namespaceObject = /*#__PURE__*/__nccwpck_require__.t(external_http_, 2);
@@ -30978,7 +31432,7 @@ var tunnel = __nccwpck_require__(329);
 var undici = __nccwpck_require__(9522);
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+http-client@4.0.0/node_modules/@actions/http-client/lib/index.js
 /* eslint-disable @typescript-eslint/no-explicit-any */
-var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+var lib_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
@@ -31067,8 +31521,8 @@ class HttpClientResponse {
         this.message = message;
     }
     readBody() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve) => lib_awaiter(this, void 0, void 0, function* () {
                 let output = Buffer.alloc(0);
                 this.message.on('data', (chunk) => {
                     output = Buffer.concat([output, chunk]);
@@ -31080,8 +31534,8 @@ class HttpClientResponse {
         });
     }
     readBodyBuffer() {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve) => lib_awaiter(this, void 0, void 0, function* () {
                 const chunks = [];
                 this.message.on('data', (chunk) => {
                     chunks.push(chunk);
@@ -31136,42 +31590,42 @@ class lib_HttpClient {
         }
     }
     options(requestUrl, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('OPTIONS', requestUrl, null, additionalHeaders || {});
         });
     }
     get(requestUrl, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('GET', requestUrl, null, additionalHeaders || {});
         });
     }
     del(requestUrl, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('DELETE', requestUrl, null, additionalHeaders || {});
         });
     }
     post(requestUrl, data, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('POST', requestUrl, data, additionalHeaders || {});
         });
     }
     patch(requestUrl, data, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('PATCH', requestUrl, data, additionalHeaders || {});
         });
     }
     put(requestUrl, data, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('PUT', requestUrl, data, additionalHeaders || {});
         });
     }
     head(requestUrl, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request('HEAD', requestUrl, null, additionalHeaders || {});
         });
     }
     sendStream(verb, requestUrl, stream, additionalHeaders) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return this.request(verb, requestUrl, stream, additionalHeaders);
         });
     }
@@ -31180,14 +31634,14 @@ class lib_HttpClient {
      * Be aware that not found returns a null.  Other errors (4xx, 5xx) reject the promise
      */
     getJson(requestUrl_1) {
-        return __awaiter(this, arguments, void 0, function* (requestUrl, additionalHeaders = {}) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, additionalHeaders = {}) {
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
             const res = yield this.get(requestUrl, additionalHeaders);
             return this._processResponse(res, this.requestOptions);
         });
     }
     postJson(requestUrl_1, obj_1) {
-        return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
             additionalHeaders[Headers.ContentType] =
@@ -31197,7 +31651,7 @@ class lib_HttpClient {
         });
     }
     putJson(requestUrl_1, obj_1) {
-        return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
             additionalHeaders[Headers.ContentType] =
@@ -31207,7 +31661,7 @@ class lib_HttpClient {
         });
     }
     patchJson(requestUrl_1, obj_1) {
-        return __awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
             const data = JSON.stringify(obj, null, 2);
             additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
             additionalHeaders[Headers.ContentType] =
@@ -31222,7 +31676,7 @@ class lib_HttpClient {
      * Prefer get, del, post and patch
      */
     request(verb, requestUrl, data, headers) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             if (this._disposed) {
                 throw new Error('Client has already been disposed.');
             }
@@ -31318,7 +31772,7 @@ class lib_HttpClient {
      * @param data
      */
     requestRaw(info, data) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             return new Promise((resolve, reject) => {
                 function callbackForResult(err, res) {
                     if (err) {
@@ -31599,15 +32053,15 @@ class lib_HttpClient {
         return baseUserAgent;
     }
     _performExponentialBackoff(retryNumber) {
-        return __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
             retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
             const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
             return new Promise(resolve => setTimeout(() => resolve(), ms));
         });
     }
     _processResponse(res, options) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve, reject) => lib_awaiter(this, void 0, void 0, function* () {
                 const statusCode = res.message.statusCode || 0;
                 const response = {
                     statusCode,
@@ -32144,460 +32598,6 @@ var external_string_decoder_ = __nccwpck_require__(3193);
 var external_events_ = __nccwpck_require__(4434);
 ;// CONCATENATED MODULE: external "child_process"
 const external_child_process_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("child_process");
-// EXTERNAL MODULE: external "assert"
-var external_assert_ = __nccwpck_require__(2613);
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+io@3.0.2/node_modules/@actions/io/lib/io-util.js
-var io_util_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-
-
-const { chmod, copyFile, lstat, mkdir, open: io_util_open, readdir, rename, rm, rmdir, stat, symlink, unlink } = external_fs_namespaceObject.promises;
-// export const {open} = 'fs'
-const IS_WINDOWS = process.platform === 'win32';
-/**
- * Custom implementation of readlink to ensure Windows junctions
- * maintain trailing backslash for backward compatibility with Node.js < 24
- *
- * In Node.js 20, Windows junctions (directory symlinks) always returned paths
- * with trailing backslashes. Node.js 24 removed this behavior, which breaks
- * code that relied on this format for path operations.
- *
- * This implementation restores the Node 20 behavior by adding a trailing
- * backslash to all junction results on Windows.
- */
-function readlink(fsPath) {
-    return io_util_awaiter(this, void 0, void 0, function* () {
-        const result = yield external_fs_namespaceObject.promises.readlink(fsPath);
-        // On Windows, restore Node 20 behavior: add trailing backslash to all results
-        // since junctions on Windows are always directory links
-        if (IS_WINDOWS && !result.endsWith('\\')) {
-            return `${result}\\`;
-        }
-        return result;
-    });
-}
-// See https://github.com/nodejs/node/blob/d0153aee367422d0858105abec186da4dff0a0c5/deps/uv/include/uv/win.h#L691
-const UV_FS_O_EXLOCK = 0x10000000;
-const READONLY = external_fs_namespaceObject.constants.O_RDONLY;
-function exists(fsPath) {
-    return io_util_awaiter(this, void 0, void 0, function* () {
-        try {
-            yield stat(fsPath);
-        }
-        catch (err) {
-            if (err.code === 'ENOENT') {
-                return false;
-            }
-            throw err;
-        }
-        return true;
-    });
-}
-function isDirectory(fsPath_1) {
-    return io_util_awaiter(this, arguments, void 0, function* (fsPath, useStat = false) {
-        const stats = useStat ? yield stat(fsPath) : yield lstat(fsPath);
-        return stats.isDirectory();
-    });
-}
-/**
- * On OSX/Linux, true if path starts with '/'. On Windows, true for paths like:
- * \, \hello, \\hello\share, C:, and C:\hello (and corresponding alternate separator cases).
- */
-function isRooted(p) {
-    p = normalizeSeparators(p);
-    if (!p) {
-        throw new Error('isRooted() parameter "p" cannot be empty');
-    }
-    if (IS_WINDOWS) {
-        return (p.startsWith('\\') || /^[A-Z]:/i.test(p) // e.g. \ or \hello or \\hello
-        ); // e.g. C: or C:\hello
-    }
-    return p.startsWith('/');
-}
-/**
- * Best effort attempt to determine whether a file exists and is executable.
- * @param filePath    file path to check
- * @param extensions  additional file extensions to try
- * @return if file exists and is executable, returns the file path. otherwise empty string.
- */
-function tryGetExecutablePath(filePath, extensions) {
-    return io_util_awaiter(this, void 0, void 0, function* () {
-        let stats = undefined;
-        try {
-            // test file exists
-            stats = yield stat(filePath);
-        }
-        catch (err) {
-            if (err.code !== 'ENOENT') {
-                // eslint-disable-next-line no-console
-                console.log(`Unexpected error attempting to determine if executable file exists '${filePath}': ${err}`);
-            }
-        }
-        if (stats && stats.isFile()) {
-            if (IS_WINDOWS) {
-                // on Windows, test for valid extension
-                const upperExt = external_path_namespaceObject.extname(filePath).toUpperCase();
-                if (extensions.some(validExt => validExt.toUpperCase() === upperExt)) {
-                    return filePath;
-                }
-            }
-            else {
-                if (isUnixExecutable(stats)) {
-                    return filePath;
-                }
-            }
-        }
-        // try each extension
-        const originalFilePath = filePath;
-        for (const extension of extensions) {
-            filePath = originalFilePath + extension;
-            stats = undefined;
-            try {
-                stats = yield stat(filePath);
-            }
-            catch (err) {
-                if (err.code !== 'ENOENT') {
-                    // eslint-disable-next-line no-console
-                    console.log(`Unexpected error attempting to determine if executable file exists '${filePath}': ${err}`);
-                }
-            }
-            if (stats && stats.isFile()) {
-                if (IS_WINDOWS) {
-                    // preserve the case of the actual file (since an extension was appended)
-                    try {
-                        const directory = external_path_namespaceObject.dirname(filePath);
-                        const upperName = external_path_namespaceObject.basename(filePath).toUpperCase();
-                        for (const actualName of yield readdir(directory)) {
-                            if (upperName === actualName.toUpperCase()) {
-                                filePath = external_path_namespaceObject.join(directory, actualName);
-                                break;
-                            }
-                        }
-                    }
-                    catch (err) {
-                        // eslint-disable-next-line no-console
-                        console.log(`Unexpected error attempting to determine the actual case of the file '${filePath}': ${err}`);
-                    }
-                    return filePath;
-                }
-                else {
-                    if (isUnixExecutable(stats)) {
-                        return filePath;
-                    }
-                }
-            }
-        }
-        return '';
-    });
-}
-function normalizeSeparators(p) {
-    p = p || '';
-    if (IS_WINDOWS) {
-        // convert slashes on Windows
-        p = p.replace(/\//g, '\\');
-        // remove redundant slashes
-        return p.replace(/\\\\+/g, '\\');
-    }
-    // remove redundant slashes
-    return p.replace(/\/\/+/g, '/');
-}
-// on Mac/Linux, test the execute bit
-//     R   W  X  R  W X R W X
-//   256 128 64 32 16 8 4 2 1
-function isUnixExecutable(stats) {
-    return ((stats.mode & 1) > 0 ||
-        ((stats.mode & 8) > 0 &&
-            process.getgid !== undefined &&
-            stats.gid === process.getgid()) ||
-        ((stats.mode & 64) > 0 &&
-            process.getuid !== undefined &&
-            stats.uid === process.getuid()));
-}
-// Get the path of cmd.exe in windows
-function getCmdPath() {
-    var _a;
-    return (_a = process.env['COMSPEC']) !== null && _a !== void 0 ? _a : `cmd.exe`;
-}
-//# sourceMappingURL=io-util.js.map
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+io@3.0.2/node_modules/@actions/io/lib/io.js
-var io_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-
-
-
-/**
- * Copies a file or folder.
- * Based off of shelljs - https://github.com/shelljs/shelljs/blob/9237f66c52e5daa40458f94f9565e18e8132f5a6/src/cp.js
- *
- * @param     source    source path
- * @param     dest      destination path
- * @param     options   optional. See CopyOptions.
- */
-function io_cp(source_1, dest_1) {
-    return io_awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
-        const { force, recursive, copySourceDirectory } = readCopyOptions(options);
-        const destStat = (yield exists(dest)) ? yield stat(dest) : null;
-        // Dest is an existing file, but not forcing
-        if (destStat && destStat.isFile() && !force) {
-            return;
-        }
-        // If dest is an existing directory, should copy inside.
-        const newDest = destStat && destStat.isDirectory() && copySourceDirectory
-            ? external_path_namespaceObject.join(dest, external_path_namespaceObject.basename(source))
-            : dest;
-        if (!(yield exists(source))) {
-            throw new Error(`no such file or directory: ${source}`);
-        }
-        const sourceStat = yield stat(source);
-        if (sourceStat.isDirectory()) {
-            if (!recursive) {
-                throw new Error(`Failed to copy. ${source} is a directory, but tried to copy without recursive flag.`);
-            }
-            else {
-                yield cpDirRecursive(source, newDest, 0, force);
-            }
-        }
-        else {
-            if (external_path_namespaceObject.relative(source, newDest) === '') {
-                // a file cannot be copied to itself
-                throw new Error(`'${newDest}' and '${source}' are the same file`);
-            }
-            yield io_copyFile(source, newDest, force);
-        }
-    });
-}
-/**
- * Moves a path.
- *
- * @param     source    source path
- * @param     dest      destination path
- * @param     options   optional. See MoveOptions.
- */
-function mv(source_1, dest_1) {
-    return io_awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
-        if (yield ioUtil.exists(dest)) {
-            let destExists = true;
-            if (yield ioUtil.isDirectory(dest)) {
-                // If dest is directory copy src into dest
-                dest = path.join(dest, path.basename(source));
-                destExists = yield ioUtil.exists(dest);
-            }
-            if (destExists) {
-                if (options.force == null || options.force) {
-                    yield rmRF(dest);
-                }
-                else {
-                    throw new Error('Destination already exists');
-                }
-            }
-        }
-        yield mkdirP(path.dirname(dest));
-        yield ioUtil.rename(source, dest);
-    });
-}
-/**
- * Remove a path recursively with force
- *
- * @param inputPath path to remove
- */
-function rmRF(inputPath) {
-    return io_awaiter(this, void 0, void 0, function* () {
-        if (IS_WINDOWS) {
-            // Check for invalid characters
-            // https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file
-            if (/[*"<>|]/.test(inputPath)) {
-                throw new Error('File path must not contain `*`, `"`, `<`, `>` or `|` on Windows');
-            }
-        }
-        try {
-            // note if path does not exist, error is silent
-            yield rm(inputPath, {
-                force: true,
-                maxRetries: 3,
-                recursive: true,
-                retryDelay: 300
-            });
-        }
-        catch (err) {
-            throw new Error(`File was unable to be removed ${err}`);
-        }
-    });
-}
-/**
- * Make a directory.  Creates the full path with folders in between
- * Will throw if it fails
- *
- * @param   fsPath        path to create
- * @returns Promise<void>
- */
-function mkdirP(fsPath) {
-    return io_awaiter(this, void 0, void 0, function* () {
-        (0,external_assert_.ok)(fsPath, 'a path argument must be provided');
-        yield mkdir(fsPath, { recursive: true });
-    });
-}
-/**
- * Returns path of a tool had the tool actually been invoked.  Resolves via paths.
- * If you check and the tool does not exist, it will throw.
- *
- * @param     tool              name of the tool
- * @param     check             whether to check if tool exists
- * @returns   Promise<string>   path to tool
- */
-function which(tool, check) {
-    return io_awaiter(this, void 0, void 0, function* () {
-        if (!tool) {
-            throw new Error("parameter 'tool' is required");
-        }
-        // recursive when check=true
-        if (check) {
-            const result = yield which(tool, false);
-            if (!result) {
-                if (IS_WINDOWS) {
-                    throw new Error(`Unable to locate executable file: ${tool}. Please verify either the file path exists or the file can be found within a directory specified by the PATH environment variable. Also verify the file has a valid extension for an executable file.`);
-                }
-                else {
-                    throw new Error(`Unable to locate executable file: ${tool}. Please verify either the file path exists or the file can be found within a directory specified by the PATH environment variable. Also check the file mode to verify the file is executable.`);
-                }
-            }
-            return result;
-        }
-        const matches = yield findInPath(tool);
-        if (matches && matches.length > 0) {
-            return matches[0];
-        }
-        return '';
-    });
-}
-/**
- * Returns a list of all occurrences of the given tool on the system path.
- *
- * @returns   Promise<string[]>  the paths of the tool
- */
-function findInPath(tool) {
-    return io_awaiter(this, void 0, void 0, function* () {
-        if (!tool) {
-            throw new Error("parameter 'tool' is required");
-        }
-        // build the list of extensions to try
-        const extensions = [];
-        if (IS_WINDOWS && process.env['PATHEXT']) {
-            for (const extension of process.env['PATHEXT'].split(external_path_namespaceObject.delimiter)) {
-                if (extension) {
-                    extensions.push(extension);
-                }
-            }
-        }
-        // if it's rooted, return it if exists. otherwise return empty.
-        if (isRooted(tool)) {
-            const filePath = yield tryGetExecutablePath(tool, extensions);
-            if (filePath) {
-                return [filePath];
-            }
-            return [];
-        }
-        // if any path separators, return empty
-        if (tool.includes(external_path_namespaceObject.sep)) {
-            return [];
-        }
-        // build the list of directories
-        //
-        // Note, technically "where" checks the current directory on Windows. From a toolkit perspective,
-        // it feels like we should not do this. Checking the current directory seems like more of a use
-        // case of a shell, and the which() function exposed by the toolkit should strive for consistency
-        // across platforms.
-        const directories = [];
-        if (process.env.PATH) {
-            for (const p of process.env.PATH.split(external_path_namespaceObject.delimiter)) {
-                if (p) {
-                    directories.push(p);
-                }
-            }
-        }
-        // find all matches
-        const matches = [];
-        for (const directory of directories) {
-            const filePath = yield tryGetExecutablePath(external_path_namespaceObject.join(directory, tool), extensions);
-            if (filePath) {
-                matches.push(filePath);
-            }
-        }
-        return matches;
-    });
-}
-function readCopyOptions(options) {
-    const force = options.force == null ? true : options.force;
-    const recursive = Boolean(options.recursive);
-    const copySourceDirectory = options.copySourceDirectory == null
-        ? true
-        : Boolean(options.copySourceDirectory);
-    return { force, recursive, copySourceDirectory };
-}
-function cpDirRecursive(sourceDir, destDir, currentDepth, force) {
-    return io_awaiter(this, void 0, void 0, function* () {
-        // Ensure there is not a run away recursive copy
-        if (currentDepth >= 255)
-            return;
-        currentDepth++;
-        yield mkdirP(destDir);
-        const files = yield readdir(sourceDir);
-        for (const fileName of files) {
-            const srcFile = `${sourceDir}/${fileName}`;
-            const destFile = `${destDir}/${fileName}`;
-            const srcFileStat = yield lstat(srcFile);
-            if (srcFileStat.isDirectory()) {
-                // Recurse
-                yield cpDirRecursive(srcFile, destFile, currentDepth, force);
-            }
-            else {
-                yield io_copyFile(srcFile, destFile, force);
-            }
-        }
-        // Change the mode for the newly created directory
-        yield chmod(destDir, (yield stat(sourceDir)).mode);
-    });
-}
-// Buffered file copy
-function io_copyFile(srcFile, destFile, force) {
-    return io_awaiter(this, void 0, void 0, function* () {
-        if ((yield lstat(srcFile)).isSymbolicLink()) {
-            // unlink/re-link it
-            try {
-                yield lstat(destFile);
-                yield unlink(destFile);
-            }
-            catch (e) {
-                // Try to override file permission
-                if (e.code === 'EPERM') {
-                    yield chmod(destFile, '0666');
-                    yield unlink(destFile);
-                }
-                // other errors = it doesn't exist, no work to do
-            }
-            // Copy over symlink
-            const symlinkFull = yield readlink(srcFile);
-            yield symlink(symlinkFull, destFile, IS_WINDOWS ? 'junction' : null);
-        }
-        else if (!(yield exists(destFile)) || force) {
-            yield copyFile(srcFile, destFile);
-        }
-    });
-}
-//# sourceMappingURL=io.js.map
 ;// CONCATENATED MODULE: external "timers"
 const external_timers_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("timers");
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+exec@3.0.0/node_modules/@actions/exec/lib/toolrunner.js
@@ -34629,9 +34629,6 @@ function isVersionGte(version, target) {
 }
 
 ;// CONCATENATED MODULE: ./src/constants.ts
-// ---------------------------------------------------------------------------
-// Solo infrastructure constants
-// ---------------------------------------------------------------------------
 /** Name of the kind cluster created by the action */
 const CLUSTER_NAME = "solo-e2e";
 /** Kubernetes namespace used for the Solo deployment */
@@ -34655,9 +34652,7 @@ const GRPC_PROXY_INTERNAL_PORT = "8080";
 const MIRROR_NODE_REST_INTERNAL_PORT = "80";
 const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
 const RELAY_INTERNAL_PORT = "7546";
-// ---------------------------------------------------------------------------
 // Tooling constants
-// ---------------------------------------------------------------------------
 const PYTHON_VERSION = "3.12.9";
 const PYTHON_RELEASE_TAG = "20250409";
 const PYTHON_DOWNLOAD_URL = `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
@@ -34673,6 +34668,59 @@ const JQ_VERSION = "1.7.1";
 const JQ_DOWNLOAD_URL = `https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`;
 const NODE_VERSION = "24.0.1";
 const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
+// List of system-level tools required for the Solo action.
+const TOOLS = [
+    {
+        name: "python",
+        checkBinary: ["python3", "python"],
+        version: PYTHON_VERSION,
+        downloadUrl: PYTHON_DOWNLOAD_URL,
+        type: "tar",
+        dirFixed: "python",
+        binSubPath: "bin",
+    },
+    {
+        name: "wget",
+        version: WGET_VERSION,
+        downloadUrl: WGET_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "java",
+        version: JAVA_VERSION,
+        downloadUrl: JAVA_DOWNLOAD_URL,
+        type: "tar",
+        dirPrefix: "jdk-",
+        binSubPath: "bin",
+    },
+    {
+        name: "kind",
+        version: KIND_VERSION,
+        downloadUrl: KIND_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "kubectl",
+        version: KUBECTL_VERSION,
+        downloadUrl: KUBECTL_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "jq",
+        version: JQ_VERSION,
+        downloadUrl: JQ_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "node",
+        checkBinary: "npm",
+        version: NODE_VERSION,
+        downloadUrl: NODE_DOWNLOAD_URL,
+        type: "tar-xz",
+        dirFixed: `node-v${NODE_VERSION}-linux-x64`,
+        binSubPath: "bin",
+    },
+];
 
 ;// CONCATENATED MODULE: ./src/setup.ts
 
@@ -34683,153 +34731,64 @@ const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE
 
 
 /**
- * Installs all system-level dependencies required by the action:
- * wget, python, Java 21, Kind, kubectl, and Solo CLI.
+ * Ensures a tool is available on PATH.
+ * Checks the tool-cache first, downloads only when necessary.
+ */
+async function ensureTool(spec) {
+    const checkNames = spec.checkBinary
+        ? Array.isArray(spec.checkBinary)
+            ? spec.checkBinary
+            : [spec.checkBinary]
+        : [spec.name];
+    // Check if the tool is already on PATH
+    for (const binary of checkNames) {
+        const found = await which(binary, false);
+        if (found) {
+            safeInfo(`${spec.name} is already installed at ${found}.`);
+            return;
+        }
+    }
+    // Check the tool-cache
+    let cachedPath = find(spec.name, spec.version);
+    if (!cachedPath) {
+        safeInfo(`Downloading ${spec.name} ${spec.version}...`);
+        const downloaded = await downloadTool(spec.downloadUrl);
+        if (spec.type === "binary") {
+            await runCommand(`chmod +x ${downloaded}`);
+            cachedPath = await cacheFile(downloaded, spec.name, spec.name, spec.version);
+        }
+        else {
+            const extractFlags = spec.type === "tar-xz" ? ["xJ"] : undefined;
+            const extractedDir = await extractTar(downloaded, undefined, extractFlags);
+            let toolHome = extractedDir;
+            if (spec.dirFixed) {
+                toolHome = (0,external_path_namespaceObject.join)(extractedDir, spec.dirFixed);
+            }
+            else if (spec.dirPrefix) {
+                const entries = await external_fs_namespaceObject.promises.readdir(extractedDir);
+                const match = entries.find((e) => e.startsWith(spec.dirPrefix)) ?? entries[0];
+                toolHome = (0,external_path_namespaceObject.join)(extractedDir, match);
+            }
+            cachedPath = await cacheDir(toolHome, spec.name, spec.version);
+        }
+        safeInfo(`${spec.name} ${spec.version} installed successfully.`);
+    }
+    else {
+        safeInfo(`${spec.name} ${spec.version} found in tool-cache.`);
+    }
+    addPath(spec.binSubPath ? (0,external_path_namespaceObject.join)(cachedPath, spec.binSubPath) : cachedPath);
+}
+/**
+ * Installs all system-level dependencies required by the action.
  */
 async function setupDependencies() {
     startGroup("Installing System Dependencies");
     try {
-        // Setup Python 3
-        const pythonPath = (await which("python3", false)) || (await which("python", false));
-        if (!pythonPath) {
-            let cachedPython = find("python", PYTHON_VERSION);
-            if (!cachedPython) {
-                safeInfo(`Installing Python ${PYTHON_VERSION} via python-build-standalone...`);
-                const downloadedPython = await downloadTool(PYTHON_DOWNLOAD_URL);
-                const extractedPythonDir = await extractTar(downloadedPython);
-                cachedPython = await cacheDir((0,external_path_namespaceObject.join)(extractedPythonDir, "python"), "python", PYTHON_VERSION);
-                safeInfo("Python installed successfully.");
-            }
-            else {
-                safeInfo(`Python ${PYTHON_VERSION} found in tool-cache.`);
-            }
-            addPath((0,external_path_namespaceObject.join)(cachedPython, "bin"));
+        for (const tool of TOOLS) {
+            await ensureTool(tool);
         }
-        else {
-            safeInfo(`Python is already installed at ${pythonPath}.`);
-        }
-        // Setup wget
-        const wgetPath = await which("wget", false);
-        if (!wgetPath) {
-            let cachedWget = find("wget", WGET_VERSION);
-            if (!cachedWget) {
-                safeInfo("Installing wget via static binary...");
-                const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedWget}`);
-                cachedWget = await cacheFile(downloadedWget, "wget", "wget", WGET_VERSION);
-                safeInfo("wget installed successfully.");
-            }
-            else {
-                safeInfo(`wget ${WGET_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedWget);
-        }
-        else {
-            safeInfo(`wget is already installed at ${wgetPath}.`);
-        }
-        // Setup Java 21 (Adoptium Temurin)
-        const javaPath = await which("java", false);
-        if (!javaPath) {
-            let cachedJava = find("java", JAVA_VERSION);
-            if (!cachedJava) {
-                safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
-                const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
-                const extractedJavaDir = await extractTar(downloadedJava);
-                // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-                const dirContents = await external_fs_namespaceObject.promises.readdir(extractedJavaDir);
-                const jdkDir = dirContents.find((name) => name.startsWith("jdk-")) ??
-                    dirContents[0];
-                const javaHomePath = (0,external_path_namespaceObject.join)(extractedJavaDir, jdkDir);
-                cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
-                safeInfo(`Java installed at ${cachedJava}.`);
-            }
-            else {
-                safeInfo(`Java ${JAVA_VERSION} found in tool-cache.`);
-            }
-            addPath((0,external_path_namespaceObject.join)(cachedJava, "bin"));
-        }
-        else {
-            safeInfo(`Java is already installed at ${javaPath}.`);
-        }
-        // Setup Kind
-        const kindPath = await which("kind", false);
-        if (!kindPath) {
-            let cachedKind = find("kind", KIND_VERSION);
-            if (!cachedKind) {
-                safeInfo(`Downloading Kind ${KIND_VERSION}...`);
-                const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedKind}`);
-                cachedKind = await cacheFile(downloadedKind, "kind", "kind", KIND_VERSION);
-            }
-            else {
-                safeInfo(`Kind ${KIND_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedKind);
-        }
-        else {
-            safeInfo(`Kind is already installed at ${kindPath}.`);
-        }
-        // Setup kubectl
-        const kubectlPath = await which("kubectl", false);
-        if (!kubectlPath) {
-            let cachedKubectl = find("kubectl", KUBECTL_VERSION);
-            if (!cachedKubectl) {
-                safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
-                const downloadedKubectl = await downloadTool(KUBECTL_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedKubectl}`);
-                cachedKubectl = await cacheFile(downloadedKubectl, "kubectl", "kubectl", KUBECTL_VERSION);
-            }
-            else {
-                safeInfo(`kubectl ${KUBECTL_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedKubectl);
-        }
-        else {
-            safeInfo(`kubectl is already installed at ${kubectlPath}.`);
-        }
-        // Setup jq
-        const jqPath = await which("jq", false);
-        if (!jqPath) {
-            let cachedJq = find("jq", JQ_VERSION);
-            if (!cachedJq) {
-                safeInfo(`Downloading jq ${JQ_VERSION}...`);
-                const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedJq}`);
-                cachedJq = await cacheFile(downloadedJq, "jq", "jq", JQ_VERSION);
-                safeInfo("jq installed successfully.");
-            }
-            else {
-                safeInfo(`jq ${JQ_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedJq);
-        }
-        else {
-            safeInfo(`jq is already installed at ${jqPath}.`);
-        }
-        // Setup Node.js / npm
-        const npmPath = await which("npm", false);
-        if (!npmPath) {
-            let cachedNode = find("node", NODE_VERSION);
-            if (!cachedNode) {
-                safeInfo("Installing Node.js (includes npm) via official tarball...");
-                const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
-                const extractedNodeDir = await extractTar(downloadedNode, undefined, ["xJ"]);
-                const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
-                const nodeHomePath = (0,external_path_namespaceObject.join)(extractedNodeDir, nodeDir);
-                cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
-                safeInfo("Node.js and npm installed successfully.");
-            }
-            else {
-                safeInfo(`Node.js ${NODE_VERSION} found in tool-cache.`);
-            }
-            addPath((0,external_path_namespaceObject.join)(cachedNode, "bin"));
-        }
-        else {
-            safeInfo(`npm is already installed at ${npmPath}.`);
-        }
-        // Install Solo CLI
         const inputSoloVersion = getInput("soloVersion");
-        const soloVersion = inputSoloVersion ? inputSoloVersion : "latest";
+        const soloVersion = inputSoloVersion || "latest";
         safeInfo(`Installing Solo CLI version: ${soloVersion}`);
         await runCommand(`npm install -g @hashgraph/solo@${soloVersion}`);
         safeInfo("✅ All dependencies installed successfully.");
@@ -34841,31 +34800,23 @@ async function setupDependencies() {
         endGroup();
     }
 }
-/**
- * Detects the installed Solo CLI version and whether it is >= 0.44.0.
- */
 async function checkSoloVersion() {
     try {
         let stdout = "";
         let stderr = "";
         await safeExec("solo", ["--version"], {
             listeners: {
-                stdout: (data) => {
-                    stdout += data.toString();
-                },
-                stderr: (data) => {
-                    stderr += data.toString();
-                },
+                stdout: (data) => { stdout += data.toString(); },
+                stderr: (data) => { stderr += data.toString(); },
             },
             ignoreReturnCode: true,
             silent: true,
         });
         const combined = `${stdout}\n${stderr}`.trim();
         safeInfo(`[checkSoloVersion] raw output: ${combined}`);
-        // Match "Version<whitespace>:<whitespace>X.Y.Z" from the Solo banner
         const match = combined.match(/Version\s*:\s*(\d+\.\d+\.\d+)/);
         if (!match) {
-            safeInfo(`[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.`);
+            safeInfo("[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.");
             return true;
         }
         const version = match[1];
@@ -34879,156 +34830,118 @@ async function checkSoloVersion() {
         return true;
     }
 }
-
-;// CONCATENATED MODULE: ./src/index.ts
-
-
-
-
-
-
-// ---------------------------------------------------------------------------
-// Solo CLI Helper Functions
-// ---------------------------------------------------------------------------
 /**
- * Creates a Kubernetes cluster using kind
+ * Generates commands for the newer Solo CLI style (v0.44.0+).
  */
-async function createKindCluster(clusterName) {
-    await runCommand(`kind create cluster -n ${clusterName}`);
+function newStyleCommands() {
+    return {
+        connectCluster: (c) => `solo cluster-ref config connect --cluster-ref kind-${c} --context kind-${c} --dev`,
+        createDeployment: (ns, d) => `solo deployment config create -n ${ns} --deployment ${d} --dev`,
+        attachCluster: (d, c, n) => `solo deployment cluster attach --deployment ${d} --cluster-ref kind-${c} --num-consensus-nodes ${n} --dev`,
+        generateKeys: (d, ids) => `solo keys consensus generate --gossip-keys --tls-keys -i ${ids} --deployment ${d} --dev`,
+        setupNamespace: (c) => `solo cluster-ref config setup -s ${c} --dev`,
+        deployNetwork: (d, ids, v) => `solo consensus network deploy -i ${ids} --deployment ${d} --release-tag ${v} --dev`,
+        setupNodes: (d, ids, v) => `solo consensus node setup -i ${ids} --deployment ${d} --release-tag ${v} --quiet-mode --dev`,
+        startNodes: (d, ids) => `solo consensus node start -i ${ids} --deployment ${d} --dev`,
+        createAccount: (d, ecdsa) => `solo ledger account create${ecdsa ? " --generate-ecdsa-key" : ""} --deployment ${d} --dev`,
+        updateAccount: (id, hbar, d) => `solo ledger account update --account-id ${id} --hbar-amount ${hbar} --deployment ${d} --dev`,
+        deployMirrorNode: (c, d, v, ingress) => `solo mirror node add --cluster-ref kind-${c} --deployment ${d} --mirror-node-version ${v} --pinger${ingress ? " --enable-ingress" : ""} --dev`,
+        deployRelay: (d, valuesFile) => `solo relay node add -i node1 --deployment ${d}${valuesFile ? ` --values-file ${valuesFile}` : ""} --dev`,
+    };
 }
 /**
- * Initializes Solo CLI configuration
+ * Generates commands for the older Solo CLI style (pre-v0.44.0).
  */
-async function initializeSolo() {
+function oldStyleCommands() {
+    return {
+        connectCluster: (c) => `solo cluster-ref connect --cluster-ref kind-${c} --context kind-${c} --dev`,
+        createDeployment: (ns, d) => `solo deployment create -n ${ns} --deployment ${d} --dev`,
+        attachCluster: (d, c, n) => `solo deployment add-cluster --deployment ${d} --cluster-ref kind-${c} --num-consensus-nodes ${n} --dev`,
+        generateKeys: (d, ids) => `solo node keys --gossip-keys --tls-keys -i ${ids} --deployment ${d} --dev`,
+        setupNamespace: (c) => `solo cluster-ref setup -s ${c} --dev`,
+        deployNetwork: (d, ids, v) => `solo network deploy -i ${ids} --deployment ${d} --release-tag ${v} --dev`,
+        setupNodes: (d, ids, v) => `solo node setup -i ${ids} --deployment ${d} --release-tag ${v} --quiet-mode --dev`,
+        startNodes: (d, ids) => `solo node start -i ${ids} --deployment ${d} --dev`,
+        createAccount: (d, ecdsa) => `solo account create${ecdsa ? " --generate-ecdsa-key" : ""} --deployment ${d} --dev`,
+        updateAccount: (id, hbar, d) => `solo account update --account-id ${id} --hbar-amount ${hbar} --deployment ${d} --dev`,
+        deployMirrorNode: (c, d, v, ingress) => `solo mirror-node deploy --cluster-ref kind-${c} --deployment ${d} --mirror-node-version ${v} --pinger${ingress ? " --enable-ingress" : ""} --dev`,
+        deployRelay: (d, valuesFile) => `solo relay deploy -i node1 --deployment ${d}${valuesFile ? ` --values-file ${valuesFile}` : ""} --dev`,
+    };
+}
+/**
+ * Detects the Solo CLI version and returns a fully resolved SoloContext.
+ */
+async function resolveSoloContext() {
+    const ge0440 = await checkSoloVersion();
+    return {
+        clusterName: CLUSTER_NAME,
+        namespace: NAMESPACE,
+        deployment: DEPLOYMENT_NAME,
+        ge0440,
+        cmd: ge0440 ? newStyleCommands() : oldStyleCommands(),
+    };
+}
+
+;// CONCATENATED MODULE: ./src/network.ts
+
+
+
+// ---------------------------------------------------------------------------
+// Consensus node lifecycle steps 
+// ---------------------------------------------------------------------------
+async function createCluster(ctx) {
+    await runCommand(`kind create cluster -n ${ctx.clusterName}`);
+}
+async function initSolo() {
     await soloRun("solo init --dev");
 }
-/**
- * Connects Solo CLI to the kind cluster
- */
-async function connectSoloToCluster(clusterName, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo cluster-ref config connect --cluster-ref kind-${clusterName} --context kind-${clusterName} --dev`);
-    }
-    else {
-        await soloRun(`solo cluster-ref connect --cluster-ref kind-${clusterName} --context kind-${clusterName} --dev`);
-    }
+async function connectCluster(ctx) {
+    await soloRun(ctx.cmd.connectCluster(ctx.clusterName));
+}
+async function createDeployment(ctx) {
+    await soloRun(ctx.cmd.createDeployment(ctx.namespace, ctx.deployment));
+}
+async function attachCluster(ctx, numNodes) {
+    await soloRun(ctx.cmd.attachCluster(ctx.deployment, ctx.clusterName, numNodes));
+}
+async function generateKeys(ctx, nodeIds) {
+    await soloRun(ctx.cmd.generateKeys(ctx.deployment, nodeIds));
+}
+async function setupNamespace(ctx) {
+    await soloRun(ctx.cmd.setupNamespace(ctx.clusterName));
 }
 /**
- * Creates a new Solo deployment
+ * Optionally deploys a block node.
+ * Must run after setupNamespace and before deployNetwork.
  */
-async function createSoloDeployment(namespace, deployment, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo deployment config create -n ${namespace} --deployment ${deployment} --dev`);
-    }
-    else {
-        await soloRun(`solo deployment create -n ${namespace} --deployment ${deployment} --dev`);
-    }
-}
-/**
- * Adds cluster to deployment
- */
-async function addClusterToDeployment(deployment, clusterName, numNodes, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo deployment cluster attach --deployment ${deployment} --cluster-ref kind-${clusterName} --num-consensus-nodes ${numNodes} --dev`);
-    }
-    else {
-        await soloRun(`solo deployment add-cluster --deployment ${deployment} --cluster-ref kind-${clusterName} --num-consensus-nodes ${numNodes} --dev`);
-    }
-}
-/**
- * Generates keys for the consensus nodes
- */
-async function generateNodeKeys(deployment, nodeIds, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo keys consensus generate --gossip-keys --tls-keys -i ${nodeIds} --deployment ${deployment} --dev`);
-    }
-    else {
-        await soloRun(`solo node keys --gossip-keys --tls-keys -i ${nodeIds} --deployment ${deployment} --dev`);
-    }
-}
-/**
- * Sets up the Solo cluster
- */
-async function setupSoloCluster(clusterName, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo cluster-ref config setup -s ${clusterName} --dev`);
-    }
-    else {
-        await soloRun(`solo cluster-ref setup -s ${clusterName} --dev`);
-    }
-}
-/**
- * Optionally deploys a block node before the consensus network is deployed.
- * The block node is deployed after cluster setup but before the consensus
- * network.
- */
-async function deployBlockNode(clusterName, deployment, hieroVersion) {
-    const installBlockNode = safeGetInput("installBlockNode") === "true";
-    if (!installBlockNode)
+async function deployBlockNode(ctx, hieroVersion) {
+    if (safeGetInput("installBlockNode") !== "true")
         return;
-    safeInfo(`[deployBlockNode] Deploying block node for cluster=${clusterName}, deployment=${deployment}, version=${hieroVersion}`);
-    try {
-        await soloRun(`solo block node add --cluster-ref kind-${clusterName} --deployment ${deployment} --release-tag ${hieroVersion} --dev`);
-    }
-    catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to deploy block node: ${errorMessage}`, {
-            cause: error,
-        });
-    }
+    safeInfo(`[deployBlockNode] Deploying block node — cluster=${ctx.clusterName}, deployment=${ctx.deployment}, version=${hieroVersion}`);
+    await soloRun(`solo block node add --cluster-ref kind-${ctx.clusterName} --deployment ${ctx.deployment} --release-tag ${hieroVersion} --dev`);
 }
-/**
- * Deploys the network
- */
-async function deployNetwork(deployment, nodeIds, hieroVersion, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo consensus network deploy -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --dev`);
-    }
-    else {
-        await soloRun(`solo network deploy -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --dev`);
-    }
+async function deployNetwork(ctx, nodeIds, hieroVersion) {
+    await soloRun(ctx.cmd.deployNetwork(ctx.deployment, nodeIds, hieroVersion));
 }
-/**
- * Sets up the consensus nodes
- */
-async function setupNode(deployment, nodeIds, hieroVersion, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo consensus node setup -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --quiet-mode --dev`);
-    }
-    else {
-        await soloRun(`solo node setup -i ${nodeIds} --deployment ${deployment} --release-tag ${hieroVersion} --quiet-mode --dev`);
-    }
+async function setupNodes(ctx, nodeIds, hieroVersion) {
+    await soloRun(ctx.cmd.setupNodes(ctx.deployment, nodeIds, hieroVersion));
 }
-/**
- * Starts the consensus nodes
- */
-async function startNode(deployment, nodeIds, soloGe0440) {
-    if (soloGe0440) {
-        await soloRun(`solo consensus node start -i ${nodeIds} --deployment ${deployment} --dev`);
-    }
-    else {
-        await soloRun(`solo node start -i ${nodeIds} --deployment ${deployment} --dev`);
-    }
+async function startNodes(ctx, nodeIds) {
+    await soloRun(ctx.cmd.startNodes(ctx.deployment, nodeIds));
 }
 // ---------------------------------------------------------------------------
-// High-level orchestration functions
+// Networking helper functions
 // ---------------------------------------------------------------------------
-/**
- * Adds entries to /etc/hosts for the consensus nodes.
- */
-async function setupHostsEntries(namespace, dualMode) {
+async function setupHostsEntries(ctx, dualMode) {
     try {
-        // Check if we have sudo access
-        const sudoCheck = await runCommand("sudo -n true", {
-            ignoreReturnCode: true,
-        });
+        const sudoCheck = await runCommand("sudo -n true", { ignoreReturnCode: true });
         if (sudoCheck === 0) {
             const entries = [
-                `127.0.0.1 network-node1-svc.${namespace}.svc.cluster.local`,
-                `127.0.0.1 envoy-proxy-node1-svc.${namespace}.svc.cluster.local`,
+                `127.0.0.1 network-node1-svc.${ctx.namespace}.svc.cluster.local`,
+                `127.0.0.1 envoy-proxy-node1-svc.${ctx.namespace}.svc.cluster.local`,
             ];
             if (dualMode) {
-                entries.push(`127.0.0.1 network-node2-svc.${namespace}.svc.cluster.local`, `127.0.0.1 envoy-proxy-node2-svc.${namespace}.svc.cluster.local`);
+                entries.push(`127.0.0.1 network-node2-svc.${ctx.namespace}.svc.cluster.local`, `127.0.0.1 envoy-proxy-node2-svc.${ctx.namespace}.svc.cluster.local`);
             }
             for (const entry of entries) {
                 await runCommand(`bash -c 'echo "${entry}" | sudo tee -a /etc/hosts'`);
@@ -35040,86 +34953,85 @@ async function setupHostsEntries(namespace, dualMode) {
         }
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        safeInfo(`⚠️  Failed to update /etc/hosts: ${errorMessage}, continuing...`);
+        const msg = error instanceof Error ? error.message : String(error);
+        safeInfo(`⚠️  Failed to update /etc/hosts: ${msg}, continuing...`);
     }
 }
+async function portForwardConsensusServices(ctx, haproxyPort, grpcProxyPort, dualModeGrpcProxyPort, dualMode) {
+    await portForwardIfExists("haproxy-node1-svc", `${haproxyPort}:${HAPROXY_INTERNAL_PORT}`, ctx.namespace);
+    if (dualMode) {
+        await portForwardIfExists("haproxy-node2-svc", `${HAPROXY_NODE2_EXTERNAL_PORT}:${HAPROXY_INTERNAL_PORT}`, ctx.namespace);
+        safeInfo(`HAProxy for node2 is accessible on port ${HAPROXY_NODE2_EXTERNAL_PORT}`);
+        await portForwardIfExists("envoy-proxy-node2-svc", `${dualModeGrpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`, ctx.namespace);
+        safeInfo(`gRPC proxy for node2 is accessible on port ${dualModeGrpcProxyPort}`);
+    }
+    await portForwardIfExists("envoy-proxy-node1-svc", `${grpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`, ctx.namespace);
+}
 /**
- * Deploys a Solo test network with full support for:
- * - Solo version-aware commands (>= 0.44.0 vs < 0.44.0)
- * - Dual mode (1 or 2 consensus nodes)
- * - /etc/hosts entries
- * - Configurable port-forwarding (HAProxy, gRPC proxy)
+ * Deploys the full consensus network, including:
+ * - kind cluster creation
+ * - Solo CLI init + deployment wiring
+ * - Optional block node (before network deploy)
+ * - Consensus network deploy + node setup/start
+ * - /etc/hosts entries + port-forwards
  */
-async function deploySoloTestNetwork(soloGe0440) {
+async function deployConsensusNetwork(ctx) {
     const hieroVersion = safeGetInput("hieroVersion");
     const dualMode = safeGetInput("dualMode") === "true";
     const haproxyPort = safeGetInput("haproxyPort") || DEFAULT_HAPROXY_PORT;
     const grpcProxyPort = safeGetInput("grpcProxyPort") || DEFAULT_GRPC_PROXY_PORT;
-    const dualModeGrpcProxyPort = safeGetInput("dualModeGrpcProxyPort") ||
-        DEFAULT_DUAL_MODE_GRPC_PROXY_PORT;
+    const dualModeGrpcProxyPort = safeGetInput("dualModeGrpcProxyPort") || DEFAULT_DUAL_MODE_GRPC_PROXY_PORT;
     if (!hieroVersion) {
         safeInfo("Hiero version not found, skipping deployment");
         return;
     }
     const numNodes = dualMode ? 2 : 1;
     const nodeIds = dualMode ? "node1,node2" : "node1";
-    safeInfo(`[deploySoloTestNetwork] soloGe0440=${soloGe0440}, dualMode=${dualMode}, nodes=${numNodes}, nodeIds=${nodeIds}, hieroVersion=${hieroVersion}, cluster=${CLUSTER_NAME}`);
+    safeInfo(`[deployConsensusNetwork] ge0440=${ctx.ge0440}, dualMode=${dualMode}, nodes=${numNodes}, hieroVersion=${hieroVersion}, cluster=${ctx.clusterName}`);
     try {
-        saveState("clusterName", CLUSTER_NAME);
+        saveState("clusterName", ctx.clusterName);
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to save cluster name state: ${errorMessage}`, {
-            cause: error,
-        });
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to save cluster name state: ${msg}`, { cause: error });
     }
     try {
-        await createKindCluster(CLUSTER_NAME);
-        await initializeSolo();
-        await connectSoloToCluster(CLUSTER_NAME, soloGe0440);
-        await createSoloDeployment(NAMESPACE, DEPLOYMENT_NAME, soloGe0440);
-        await addClusterToDeployment(DEPLOYMENT_NAME, CLUSTER_NAME, numNodes, soloGe0440);
-        await generateNodeKeys(DEPLOYMENT_NAME, nodeIds, soloGe0440);
-        await setupSoloCluster(CLUSTER_NAME, soloGe0440);
-        // Optionally deploy a block node before the consensus network is deployed.
-        await deployBlockNode(CLUSTER_NAME, DEPLOYMENT_NAME, hieroVersion);
-        await deployNetwork(DEPLOYMENT_NAME, nodeIds, hieroVersion, soloGe0440);
-        await setupNode(DEPLOYMENT_NAME, nodeIds, hieroVersion, soloGe0440);
-        await startNode(DEPLOYMENT_NAME, nodeIds, soloGe0440);
-        // Debug: List services in the solo namespace
-        safeInfo(`Listing services in namespace ${NAMESPACE}:`);
-        await runCommand(`kubectl get svc -n ${NAMESPACE}`);
-        // Add /etc/hosts entries
-        await setupHostsEntries(NAMESPACE, dualMode);
-        // Port forward HAProxy for node1
-        await portForwardIfExists("haproxy-node1-svc", `${haproxyPort}:${HAPROXY_INTERNAL_PORT}`, NAMESPACE);
-        // Port forwards for node2 if dual mode is enabled
-        if (dualMode) {
-            await portForwardIfExists("haproxy-node2-svc", `${HAPROXY_NODE2_EXTERNAL_PORT}:${HAPROXY_INTERNAL_PORT}`, NAMESPACE);
-            safeInfo(`HAProxy for node2 is accessible on port ${HAPROXY_NODE2_EXTERNAL_PORT}`);
-            await portForwardIfExists("envoy-proxy-node2-svc", `${dualModeGrpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`, NAMESPACE);
-            safeInfo(`gRPC proxy for node2 is accessible on port ${dualModeGrpcProxyPort}`);
-        }
-        // Port forward gRPC proxy for node1
-        await portForwardIfExists("envoy-proxy-node1-svc", `${grpcProxyPort}:${GRPC_PROXY_INTERNAL_PORT}`, NAMESPACE);
+        await createCluster(ctx);
+        await initSolo();
+        await connectCluster(ctx);
+        await createDeployment(ctx);
+        await attachCluster(ctx, numNodes);
+        await generateKeys(ctx, nodeIds);
+        await setupNamespace(ctx);
+        // Block node must be deployed before the consensus network.
+        await deployBlockNode(ctx, hieroVersion);
+        await deployNetwork(ctx, nodeIds, hieroVersion);
+        await setupNodes(ctx, nodeIds, hieroVersion);
+        await startNodes(ctx, nodeIds);
+        safeInfo(`Listing services in namespace ${ctx.namespace}:`);
+        await runCommand(`kubectl get svc -n ${ctx.namespace}`);
+        await setupHostsEntries(ctx, dualMode);
+        await portForwardConsensusServices(ctx, haproxyPort, grpcProxyPort, dualModeGrpcProxyPort, dualMode);
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to deploy Solo test network: ${errorMessage}`, {
-            cause: error,
-        });
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to deploy consensus network: ${msg}`, { cause: error });
     }
 }
+
+;// CONCATENATED MODULE: ./src/services.ts
+
+
+
+
 /**
- * Deploys a Mirror Node.
- * Also deploys when installRelay is true since the relay expects
- * mirror-ingress-controller.
+ * Deploys the Mirror Node.
+ * Also runs when installRelay is true since the relay depends on
+ * mirror-ingress-controller (--enable-ingress).
  */
-async function deployMirrorNode(soloGe0440) {
+async function deployMirrorNode(ctx) {
     const installMirrorNode = safeGetInput("installMirrorNode") === "true";
     const installRelay = safeGetInput("installRelay") === "true";
-    // Mirror node is required when installRelay is true
     if (!installMirrorNode && !installRelay)
         return;
     const version = safeGetInput("mirrorNodeVersion");
@@ -35127,129 +35039,84 @@ async function deployMirrorNode(soloGe0440) {
     const portGrpc = safeGetInput("mirrorNodePortGrpc") || DEFAULT_MIRROR_NODE_PORT_GRPC;
     const portWeb3 = safeGetInput("mirrorNodePortWeb3Rest") || DEFAULT_MIRROR_NODE_PORT_WEB3;
     const javaRestApiPort = safeGetInput("javaRestApiPort") || DEFAULT_JAVA_REST_API_PORT;
-    // Relay requires mirror-ingress-controller; --enable-ingress installs it.
+    // Relay requires mirror-ingress-controller
     const enableIngress = installRelay;
     try {
-        let baseArgs = "";
-        if (soloGe0440) {
-            baseArgs = `solo mirror node add --cluster-ref kind-${CLUSTER_NAME} --deployment ${DEPLOYMENT_NAME} --mirror-node-version ${version} --pinger`;
-        }
-        else {
-            baseArgs = `solo mirror-node deploy --cluster-ref kind-${CLUSTER_NAME} --deployment ${DEPLOYMENT_NAME} --mirror-node-version ${version} --pinger`;
-        }
-        if (enableIngress) {
-            baseArgs += " --enable-ingress";
-        }
-        baseArgs += " --dev";
-        await soloRun(baseArgs);
-        // Debug: List services in the solo namespace
-        safeInfo(`Listing services in namespace ${NAMESPACE}:`);
-        await runCommand(`kubectl get svc -n ${NAMESPACE}`);
-        // Port forward Mirror Node services
-        await portForwardIfExists("mirror-1-rest", `${portRest}:${MIRROR_NODE_REST_INTERNAL_PORT}`, NAMESPACE);
-        await portForwardIfExists("mirror-1-grpc", `${portGrpc}:${MIRROR_NODE_GRPC_INTERNAL_PORT}`, NAMESPACE);
-        await portForwardIfExists("mirror-1-web3", `${portWeb3}:${MIRROR_NODE_REST_INTERNAL_PORT}`, NAMESPACE);
-        await portForwardIfExists("mirror-1-restjava", `${javaRestApiPort}:${MIRROR_NODE_REST_INTERNAL_PORT}`, NAMESPACE);
+        await soloRun(ctx.cmd.deployMirrorNode(ctx.clusterName, ctx.deployment, version, enableIngress));
+        safeInfo(`Listing services in namespace ${ctx.namespace}:`);
+        await runCommand(`kubectl get svc -n ${ctx.namespace}`);
+        await portForwardIfExists("mirror-1-rest", `${portRest}:${MIRROR_NODE_REST_INTERNAL_PORT}`, ctx.namespace);
+        await portForwardIfExists("mirror-1-grpc", `${portGrpc}:${MIRROR_NODE_GRPC_INTERNAL_PORT}`, ctx.namespace);
+        await portForwardIfExists("mirror-1-web3", `${portWeb3}:${MIRROR_NODE_REST_INTERNAL_PORT}`, ctx.namespace);
+        await portForwardIfExists("mirror-1-restjava", `${javaRestApiPort}:${MIRROR_NODE_REST_INTERNAL_PORT}`, ctx.namespace);
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to deploy Mirror Node: ${errorMessage}`, {
-            cause: error,
-        });
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to deploy Mirror Node: ${msg}`, { cause: error });
     }
 }
 /**
  * Deploys the JSON-RPC Relay.
  */
-async function deployRelay(soloGe0440) {
-    const installRelay = safeGetInput("installRelay") === "true";
-    if (!installRelay)
+async function deployRelay(ctx) {
+    if (safeGetInput("installRelay") !== "true")
         return;
     const relayPort = safeGetInput("relayPort") || DEFAULT_RELAY_PORT;
     try {
-        let baseArgs = "";
-        if (soloGe0440) {
-            baseArgs = `solo relay node add -i node1 --deployment ${DEPLOYMENT_NAME} --dev`;
-        }
-        else {
-            baseArgs = `solo relay deploy -i node1 --deployment ${DEPLOYMENT_NAME} --dev`;
-        }
-        // Add --values-file if relay-low-resources.yaml exists
         const workspacePath = process.env.GITHUB_WORKSPACE ?? ".";
         const relayValuesFile = (0,external_path_namespaceObject.join)(workspacePath, "relay-low-resources.yaml");
-        if ((0,external_fs_namespaceObject.existsSync)(relayValuesFile)) {
-            baseArgs += ` --values-file ${relayValuesFile}`;
-        }
-        await soloRun(baseArgs);
+        const valuesFile = (0,external_fs_namespaceObject.existsSync)(relayValuesFile) ? relayValuesFile : undefined;
+        await soloRun(ctx.cmd.deployRelay(ctx.deployment, valuesFile));
         safeInfo("JSON-RPC-Relay installed successfully");
-        // Debug: List services in the solo namespace
-        safeInfo(`Listing services in namespace ${NAMESPACE}:`);
-        await runCommand(`kubectl get svc -n ${NAMESPACE}`);
-        // Port forward the Relay service
-        await portForwardIfExists("relay-node1-hedera-json-rpc-relay", `${relayPort}:${RELAY_INTERNAL_PORT}`, NAMESPACE);
+        safeInfo(`Listing services in namespace ${ctx.namespace}:`);
+        await runCommand(`kubectl get svc -n ${ctx.namespace}`);
+        await portForwardIfExists("relay-node1-hedera-json-rpc-relay", `${relayPort}:${RELAY_INTERNAL_PORT}`, ctx.namespace);
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        safeInfo(`Relay service deployment failed: ${errorMessage}, continuing...`);
+        const msg = error instanceof Error ? error.message : String(error);
+        safeInfo(`Relay deployment failed: ${msg}, continuing...`);
     }
 }
+
+;// CONCATENATED MODULE: ./src/accounts.ts
+
+
 /**
- * Creates an account (ECDSA or ED25519) with Solo version-aware commands.
+ * Creates an account (ECDSA or ED25519), updates its HBAR balance,
+ * and writes the account details to action outputs.
  */
-async function createAccount(type, soloGe0440) {
+async function createAccount(type, ctx) {
     const outputFile = `account_create_output_${type}.txt`;
     const hbarAmount = safeGetInput("hbarAmount") || DEFAULT_HBAR_AMOUNT;
+    const isEcdsa = type === "ecdsa";
     safeInfo(`Creating ${type.toUpperCase()} account...`);
     try {
-        // Build the create command
-        let createArgs = "";
-        if (soloGe0440) {
-            createArgs = `solo ledger account create`;
-        }
-        else {
-            createArgs = `solo account create`;
-        }
-        if (type === "ecdsa") {
-            createArgs += " --generate-ecdsa-key";
-        }
-        createArgs += ` --deployment ${DEPLOYMENT_NAME} --dev`;
-        // Execute and redirect output to file
-        const createCommand = `${createArgs} > ${outputFile}`;
-        await runCommand(`bash -c '${createCommand}'`);
-        // Read and parse the output
+        // Create the account and capture output
+        const createCmd = `${ctx.cmd.createAccount(ctx.deployment, isEcdsa)} > ${outputFile}`;
+        await runCommand(`bash -c '${createCmd}'`);
+        // Parse the account JSON from the CLI output
         const content = safeReadFileSync(outputFile);
         const accountJson = extractAccountAsJson(content);
-        const accountInfo = JSON.parse(accountJson);
-        const { accountId, publicKey } = accountInfo;
+        const { accountId, publicKey } = JSON.parse(accountJson);
         if (!accountId || !publicKey) {
             safeInfo("Account ID or public key not found, skipping account creation");
             return;
         }
-        // Get the private key from the Kubernetes secret
-        const privateKeyCmd = `kubectl get secret account-key-${accountId} -n ${NAMESPACE} -o jsonpath='{.data.privateKey}' | base64 -d | xargs`;
+        // Retrieve the private key from the Kubernetes secret
+        const privateKeyCmd = `kubectl get secret account-key-${accountId} -n ${ctx.namespace} -o jsonpath='{.data.privateKey}' | base64 -d | xargs`;
         let privateKey = "";
         await runCommand(`bash -c "${privateKeyCmd}"`, {
             listeners: {
-                stdout: (data) => {
-                    privateKey += data.toString();
-                },
+                stdout: (data) => { privateKey += data.toString(); },
             },
         });
-        // Update the account with the specified hbar amount
-        let updateArgs = "";
-        if (soloGe0440) {
-            updateArgs = "solo ledger account update";
-        }
-        else {
-            updateArgs = "solo account update";
-        }
-        updateArgs += ` --account-id ${accountId} --hbar-amount ${hbarAmount} --deployment ${DEPLOYMENT_NAME} --dev`;
-        await soloRun(updateArgs);
+        // Fund the account
+        await soloRun(ctx.cmd.updateAccount(accountId, hbarAmount, ctx.deployment));
         safeInfo(`accountId=${accountId}`);
         safeInfo(`publicKey=${publicKey}`);
         safeInfo(`privateKey=${privateKey.trim()}`);
-        // Set outputs based on account type
-        if (type === "ecdsa") {
+        // Write type-specific outputs
+        if (isEcdsa) {
             safeSetOutput("ecdsaAccountId", accountId);
             safeSetOutput("ecdsaPublicKey", publicKey);
             safeSetOutput("ecdsaPrivateKey", privateKey.trim());
@@ -35258,47 +35125,35 @@ async function createAccount(type, soloGe0440) {
             safeSetOutput("ed25519AccountId", accountId);
             safeSetOutput("ed25519PublicKey", publicKey);
             safeSetOutput("ed25519PrivateKey", privateKey.trim());
-            // Set generic outputs for backward compatibility
+            // Generic outputs for backward compatibility
             safeSetOutput("accountId", accountId);
             safeSetOutput("publicKey", publicKey);
             safeSetOutput("privateKey", privateKey.trim());
         }
     }
     catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to create ${type} account: ${errorMessage}`, {
-            cause: error,
-        });
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to create ${type} account: ${msg}`, { cause: error });
     }
 }
-/**
- * Main entry point.
- * Installs dependencies, detects Solo version, deploys the test network,
- * optionally deploys Mirror Node and Relay, and creates accounts.
- */
+
+;// CONCATENATED MODULE: ./src/index.ts
+
+
+
+
+
 async function run() {
-    try {
-        // Install all dependencies
-        await setupDependencies();
-        // Detect Solo CLI version
-        const soloGe0440 = await checkSoloVersion();
-        // Deploy Solo test network
-        await deploySoloTestNetwork(soloGe0440);
-        // Deploy optional services
-        await deployMirrorNode(soloGe0440);
-        await deployRelay(soloGe0440);
-        // Create accounts
-        await createAccount("ecdsa", soloGe0440);
-        await createAccount("ed25519", soloGe0440);
-    }
-    catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        safeSetFailed(`Script execution failed: ${errorMessage}`);
-    }
+    await setupDependencies();
+    const ctx = await resolveSoloContext();
+    await deployConsensusNetwork(ctx);
+    await deployMirrorNode(ctx);
+    await deployRelay(ctx);
+    await createAccount("ecdsa", ctx);
+    await createAccount("ed25519", ctx);
 }
-// Execute the main function and handle any unhandled errors
 run().catch((error) => {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    safeSetFailed(`Unhandled error in main execution: ${errorMessage}`);
+    const msg = error instanceof Error ? error.message : String(error);
+    safeSetFailed(`Unhandled error: ${msg}`);
 });
 

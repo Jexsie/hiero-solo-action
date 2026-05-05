@@ -11,204 +11,80 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { safeInfo, runCommand, safeExec, isVersionGte } from "./utils.js";
 import {
-    PYTHON_VERSION,
-    PYTHON_DOWNLOAD_URL,
-    WGET_VERSION,
-    WGET_DOWNLOAD_URL,
-    JAVA_VERSION,
-    JAVA_DOWNLOAD_URL,
-    KIND_VERSION,
-    KIND_DOWNLOAD_URL,
-    KUBECTL_VERSION,
-    KUBECTL_DOWNLOAD_URL,
-    JQ_VERSION,
-    JQ_DOWNLOAD_URL,
-    NODE_VERSION,
-    NODE_DOWNLOAD_URL,
+    CLUSTER_NAME,
+    DEPLOYMENT_NAME,
+    NAMESPACE,
+    TOOLS,
 } from "./constants.js";
+import type { SoloCommands, SoloContext, ToolSpec } from "./types.js";
 
 /**
- * Installs all system-level dependencies required by the action:
- * wget, python, Java 21, Kind, kubectl, and Solo CLI.
+ * Ensures a tool is available on PATH.
+ * Checks the tool-cache first, downloads only when necessary.
+ */
+async function ensureTool(spec: ToolSpec): Promise<void> {
+    const checkNames = spec.checkBinary
+        ? Array.isArray(spec.checkBinary)
+            ? spec.checkBinary
+            : [spec.checkBinary]
+        : [spec.name];
+
+    // Check if the tool is already on PATH
+    for (const binary of checkNames) {
+        const found = await which(binary, false);
+        if (found) {
+            safeInfo(`${spec.name} is already installed at ${found}.`);
+            return;
+        }
+    }
+
+    // Check the tool-cache
+    let cachedPath = find(spec.name, spec.version);
+
+    if (!cachedPath) {
+        safeInfo(`Downloading ${spec.name} ${spec.version}...`);
+        const downloaded = await downloadTool(spec.downloadUrl);
+
+        if (spec.type === "binary") {
+            await runCommand(`chmod +x ${downloaded}`);
+            cachedPath = await cacheFile(downloaded, spec.name, spec.name, spec.version);
+        } else {
+            const extractFlags = spec.type === "tar-xz" ? ["xJ"] : undefined;
+            const extractedDir = await extractTar(downloaded, undefined, extractFlags);
+
+            let toolHome = extractedDir;
+            if (spec.dirFixed) {
+                toolHome = join(extractedDir, spec.dirFixed);
+            } else if (spec.dirPrefix) {
+                const entries = await fs.readdir(extractedDir);
+                const match = entries.find((e) => e.startsWith(spec.dirPrefix!)) ?? entries[0];
+                toolHome = join(extractedDir, match);
+            }
+
+            cachedPath = await cacheDir(toolHome, spec.name, spec.version);
+        }
+
+        safeInfo(`${spec.name} ${spec.version} installed successfully.`);
+    } else {
+        safeInfo(`${spec.name} ${spec.version} found in tool-cache.`);
+    }
+
+    addPath(spec.binSubPath ? join(cachedPath, spec.binSubPath) : cachedPath);
+}
+
+
+/**
+ * Installs all system-level dependencies required by the action.
  */
 export async function setupDependencies(): Promise<void> {
     startGroup("Installing System Dependencies");
-
     try {
-        // Setup Python 3
-        const pythonPath =
-            (await which("python3", false)) || (await which("python", false));
-        if (!pythonPath) {
-            let cachedPython = find("python", PYTHON_VERSION);
-            if (!cachedPython) {
-                safeInfo(
-                    `Installing Python ${PYTHON_VERSION} via python-build-standalone...`,
-                );
-                const downloadedPython =
-                    await downloadTool(PYTHON_DOWNLOAD_URL);
-                const extractedPythonDir = await extractTar(downloadedPython);
-                cachedPython = await cacheDir(
-                    join(extractedPythonDir, "python"),
-                    "python",
-                    PYTHON_VERSION,
-                );
-                safeInfo("Python installed successfully.");
-            } else {
-                safeInfo(`Python ${PYTHON_VERSION} found in tool-cache.`);
-            }
-            addPath(join(cachedPython, "bin"));
-        } else {
-            safeInfo(`Python is already installed at ${pythonPath}.`);
+        for (const tool of TOOLS) {
+            await ensureTool(tool);
         }
 
-        // Setup wget
-        const wgetPath = await which("wget", false);
-        if (!wgetPath) {
-            let cachedWget = find("wget", WGET_VERSION);
-            if (!cachedWget) {
-                safeInfo("Installing wget via static binary...");
-                const downloadedWget = await downloadTool(WGET_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedWget}`);
-                cachedWget = await cacheFile(
-                    downloadedWget,
-                    "wget",
-                    "wget",
-                    WGET_VERSION,
-                );
-                safeInfo("wget installed successfully.");
-            } else {
-                safeInfo(`wget ${WGET_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedWget);
-        } else {
-            safeInfo(`wget is already installed at ${wgetPath}.`);
-        }
-
-        // Setup Java 21 (Adoptium Temurin)
-        const javaPath = await which("java", false);
-        if (!javaPath) {
-            let cachedJava = find("java", JAVA_VERSION);
-            if (!cachedJava) {
-                safeInfo("Installing OpenJDK 21 via Adoptium Temurin...");
-                const downloadedJava = await downloadTool(JAVA_DOWNLOAD_URL);
-                const extractedJavaDir = await extractTar(downloadedJava);
-
-                // The tarball contains a single top-level folder like 'jdk-21.0.6+7'
-                const dirContents = await fs.readdir(extractedJavaDir);
-                const jdkDir =
-                    dirContents.find((name) => name.startsWith("jdk-")) ??
-                    dirContents[0];
-                const javaHomePath = join(extractedJavaDir, jdkDir);
-
-                cachedJava = await cacheDir(javaHomePath, "java", JAVA_VERSION);
-                safeInfo(`Java installed at ${cachedJava}.`);
-            } else {
-                safeInfo(`Java ${JAVA_VERSION} found in tool-cache.`);
-            }
-            addPath(join(cachedJava, "bin"));
-        } else {
-            safeInfo(`Java is already installed at ${javaPath}.`);
-        }
-
-        // Setup Kind
-        const kindPath = await which("kind", false);
-        if (!kindPath) {
-            let cachedKind = find("kind", KIND_VERSION);
-            if (!cachedKind) {
-                safeInfo(`Downloading Kind ${KIND_VERSION}...`);
-                const downloadedKind = await downloadTool(KIND_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedKind}`);
-                cachedKind = await cacheFile(
-                    downloadedKind,
-                    "kind",
-                    "kind",
-                    KIND_VERSION,
-                );
-            } else {
-                safeInfo(`Kind ${KIND_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedKind);
-        } else {
-            safeInfo(`Kind is already installed at ${kindPath}.`);
-        }
-
-        // Setup kubectl
-        const kubectlPath = await which("kubectl", false);
-        if (!kubectlPath) {
-            let cachedKubectl = find("kubectl", KUBECTL_VERSION);
-            if (!cachedKubectl) {
-                safeInfo(`Downloading kubectl ${KUBECTL_VERSION}...`);
-                const downloadedKubectl =
-                    await downloadTool(KUBECTL_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedKubectl}`);
-                cachedKubectl = await cacheFile(
-                    downloadedKubectl,
-                    "kubectl",
-                    "kubectl",
-                    KUBECTL_VERSION,
-                );
-            } else {
-                safeInfo(`kubectl ${KUBECTL_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedKubectl);
-        } else {
-            safeInfo(`kubectl is already installed at ${kubectlPath}.`);
-        }
-
-        // Setup jq
-        const jqPath = await which("jq", false);
-        if (!jqPath) {
-            let cachedJq = find("jq", JQ_VERSION);
-            if (!cachedJq) {
-                safeInfo(`Downloading jq ${JQ_VERSION}...`);
-                const downloadedJq = await downloadTool(JQ_DOWNLOAD_URL);
-                await runCommand(`chmod +x ${downloadedJq}`);
-                cachedJq = await cacheFile(
-                    downloadedJq,
-                    "jq",
-                    "jq",
-                    JQ_VERSION,
-                );
-                safeInfo("jq installed successfully.");
-            } else {
-                safeInfo(`jq ${JQ_VERSION} found in tool-cache.`);
-            }
-            addPath(cachedJq);
-        } else {
-            safeInfo(`jq is already installed at ${jqPath}.`);
-        }
-
-        // Setup Node.js / npm
-        const npmPath = await which("npm", false);
-        if (!npmPath) {
-            let cachedNode = find("node", NODE_VERSION);
-            if (!cachedNode) {
-                safeInfo(
-                    "Installing Node.js (includes npm) via official tarball...",
-                );
-                const downloadedNode = await downloadTool(NODE_DOWNLOAD_URL);
-                const extractedNodeDir = await extractTar(
-                    downloadedNode,
-                    undefined,
-                    ["xJ"],
-                );
-
-                const nodeDir = `node-v${NODE_VERSION}-linux-x64`;
-                const nodeHomePath = join(extractedNodeDir, nodeDir);
-
-                cachedNode = await cacheDir(nodeHomePath, "node", NODE_VERSION);
-                safeInfo("Node.js and npm installed successfully.");
-            } else {
-                safeInfo(`Node.js ${NODE_VERSION} found in tool-cache.`);
-            }
-            addPath(join(cachedNode, "bin"));
-        } else {
-            safeInfo(`npm is already installed at ${npmPath}.`);
-        }
-
-        // Install Solo CLI
         const inputSoloVersion = getInput("soloVersion");
-        const soloVersion = inputSoloVersion ? inputSoloVersion : "latest";
+        const soloVersion = inputSoloVersion || "latest";
         safeInfo(`Installing Solo CLI version: ${soloVersion}`);
         await runCommand(`npm install -g @hashgraph/solo@${soloVersion}`);
 
@@ -223,22 +99,16 @@ export async function setupDependencies(): Promise<void> {
     }
 }
 
-/**
- * Detects the installed Solo CLI version and whether it is >= 0.44.0.
- */
-export async function checkSoloVersion(): Promise<boolean> {
+
+async function checkSoloVersion(): Promise<boolean> {
     try {
         let stdout = "";
         let stderr = "";
 
         await safeExec("solo", ["--version"], {
             listeners: {
-                stdout: (data: Buffer) => {
-                    stdout += data.toString();
-                },
-                stderr: (data: Buffer) => {
-                    stderr += data.toString();
-                },
+                stdout: (data: Buffer) => { stdout += data.toString(); },
+                stderr: (data: Buffer) => { stderr += data.toString(); },
             },
             ignoreReturnCode: true,
             silent: true,
@@ -247,13 +117,9 @@ export async function checkSoloVersion(): Promise<boolean> {
         const combined = `${stdout}\n${stderr}`.trim();
         safeInfo(`[checkSoloVersion] raw output: ${combined}`);
 
-        // Match "Version<whitespace>:<whitespace>X.Y.Z" from the Solo banner
         const match = combined.match(/Version\s*:\s*(\d+\.\d+\.\d+)/);
-
         if (!match) {
-            safeInfo(
-                `[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.`,
-            );
+            safeInfo("[checkSoloVersion] Could not parse version. Assuming >= 0.44.0.");
             return true;
         }
 
@@ -263,9 +129,85 @@ export async function checkSoloVersion(): Promise<boolean> {
         return ge0440;
     } catch (error: unknown) {
         const msg = error instanceof Error ? error.message : String(error);
-        safeInfo(
-            `[checkSoloVersion] Failed to detect version: ${msg}. Assuming >= 0.44.0.`,
-        );
+        safeInfo(`[checkSoloVersion] Failed to detect version: ${msg}. Assuming >= 0.44.0.`);
         return true;
     }
+}
+
+/**
+ * Generates commands for the newer Solo CLI style (v0.44.0+).
+ */
+function newStyleCommands(): SoloCommands {
+    return {
+        connectCluster: (c) =>
+            `solo cluster-ref config connect --cluster-ref kind-${c} --context kind-${c} --dev`,
+        createDeployment: (ns, d) =>
+            `solo deployment config create -n ${ns} --deployment ${d} --dev`,
+        attachCluster: (d, c, n) =>
+            `solo deployment cluster attach --deployment ${d} --cluster-ref kind-${c} --num-consensus-nodes ${n} --dev`,
+        generateKeys: (d, ids) =>
+            `solo keys consensus generate --gossip-keys --tls-keys -i ${ids} --deployment ${d} --dev`,
+        setupNamespace: (c) =>
+            `solo cluster-ref config setup -s ${c} --dev`,
+        deployNetwork: (d, ids, v) =>
+            `solo consensus network deploy -i ${ids} --deployment ${d} --release-tag ${v} --dev`,
+        setupNodes: (d, ids, v) =>
+            `solo consensus node setup -i ${ids} --deployment ${d} --release-tag ${v} --quiet-mode --dev`,
+        startNodes: (d, ids) =>
+            `solo consensus node start -i ${ids} --deployment ${d} --dev`,
+        createAccount: (d, ecdsa) =>
+            `solo ledger account create${ecdsa ? " --generate-ecdsa-key" : ""} --deployment ${d} --dev`,
+        updateAccount: (id, hbar, d) =>
+            `solo ledger account update --account-id ${id} --hbar-amount ${hbar} --deployment ${d} --dev`,
+        deployMirrorNode: (c, d, v, ingress) =>
+            `solo mirror node add --cluster-ref kind-${c} --deployment ${d} --mirror-node-version ${v} --pinger${ingress ? " --enable-ingress" : ""} --dev`,
+        deployRelay: (d, valuesFile) =>
+            `solo relay node add -i node1 --deployment ${d}${valuesFile ? ` --values-file ${valuesFile}` : ""} --dev`,
+    };
+}
+
+/**
+ * Generates commands for the older Solo CLI style (pre-v0.44.0).
+ */
+function oldStyleCommands(): SoloCommands {
+    return {
+        connectCluster: (c) =>
+            `solo cluster-ref connect --cluster-ref kind-${c} --context kind-${c} --dev`,
+        createDeployment: (ns, d) =>
+            `solo deployment create -n ${ns} --deployment ${d} --dev`,
+        attachCluster: (d, c, n) =>
+            `solo deployment add-cluster --deployment ${d} --cluster-ref kind-${c} --num-consensus-nodes ${n} --dev`,
+        generateKeys: (d, ids) =>
+            `solo node keys --gossip-keys --tls-keys -i ${ids} --deployment ${d} --dev`,
+        setupNamespace: (c) =>
+            `solo cluster-ref setup -s ${c} --dev`,
+        deployNetwork: (d, ids, v) =>
+            `solo network deploy -i ${ids} --deployment ${d} --release-tag ${v} --dev`,
+        setupNodes: (d, ids, v) =>
+            `solo node setup -i ${ids} --deployment ${d} --release-tag ${v} --quiet-mode --dev`,
+        startNodes: (d, ids) =>
+            `solo node start -i ${ids} --deployment ${d} --dev`,
+        createAccount: (d, ecdsa) =>
+            `solo account create${ecdsa ? " --generate-ecdsa-key" : ""} --deployment ${d} --dev`,
+        updateAccount: (id, hbar, d) =>
+            `solo account update --account-id ${id} --hbar-amount ${hbar} --deployment ${d} --dev`,
+        deployMirrorNode: (c, d, v, ingress) =>
+            `solo mirror-node deploy --cluster-ref kind-${c} --deployment ${d} --mirror-node-version ${v} --pinger${ingress ? " --enable-ingress" : ""} --dev`,
+        deployRelay: (d, valuesFile) =>
+            `solo relay deploy -i node1 --deployment ${d}${valuesFile ? ` --values-file ${valuesFile}` : ""} --dev`,
+    };
+}
+
+/**
+ * Detects the Solo CLI version and returns a fully resolved SoloContext.
+ */
+export async function resolveSoloContext(): Promise<SoloContext> {
+    const ge0440 = await checkSoloVersion();
+    return {
+        clusterName: CLUSTER_NAME,
+        namespace: NAMESPACE,
+        deployment: DEPLOYMENT_NAME,
+        ge0440,
+        cmd: ge0440 ? newStyleCommands() : oldStyleCommands(),
+    };
 }

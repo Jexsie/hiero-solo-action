@@ -31099,9 +31099,6 @@ function isVersionGte(version, target) {
 }
 
 ;// CONCATENATED MODULE: ./src/constants.ts
-// ---------------------------------------------------------------------------
-// Solo infrastructure constants
-// ---------------------------------------------------------------------------
 /** Name of the kind cluster created by the action */
 const CLUSTER_NAME = "solo-e2e";
 /** Kubernetes namespace used for the Solo deployment */
@@ -31125,24 +31122,75 @@ const GRPC_PROXY_INTERNAL_PORT = "8080";
 const MIRROR_NODE_REST_INTERNAL_PORT = "80";
 const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
 const RELAY_INTERNAL_PORT = "7546";
-// ---------------------------------------------------------------------------
 // Tooling constants
-// ---------------------------------------------------------------------------
 const PYTHON_VERSION = "3.12.9";
 const PYTHON_RELEASE_TAG = "20250409";
-const PYTHON_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`));
+const PYTHON_DOWNLOAD_URL = `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
 const WGET_VERSION = "1.25.0";
 const WGET_DOWNLOAD_URL = "https://github.com/userdocs/qbt-workflow-files/releases/latest/download/wget";
 const JAVA_VERSION = "21.0.6";
 const JAVA_DOWNLOAD_URL = "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk";
 const KIND_VERSION = "v0.29.0";
-const KIND_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`));
+const KIND_DOWNLOAD_URL = `https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64`;
 const KUBECTL_VERSION = "v1.32.2";
-const KUBECTL_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`));
+const KUBECTL_DOWNLOAD_URL = `https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl`;
 const JQ_VERSION = "1.7.1";
-const JQ_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`));
+const JQ_DOWNLOAD_URL = `https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64`;
 const NODE_VERSION = "24.0.1";
-const NODE_DOWNLOAD_URL = (/* unused pure expression or super */ null && (`https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`));
+const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
+// List of system-level tools required for the Solo action.
+const TOOLS = [
+    {
+        name: "python",
+        checkBinary: ["python3", "python"],
+        version: PYTHON_VERSION,
+        downloadUrl: PYTHON_DOWNLOAD_URL,
+        type: "tar",
+        dirFixed: "python",
+        binSubPath: "bin",
+    },
+    {
+        name: "wget",
+        version: WGET_VERSION,
+        downloadUrl: WGET_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "java",
+        version: JAVA_VERSION,
+        downloadUrl: JAVA_DOWNLOAD_URL,
+        type: "tar",
+        dirPrefix: "jdk-",
+        binSubPath: "bin",
+    },
+    {
+        name: "kind",
+        version: KIND_VERSION,
+        downloadUrl: KIND_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "kubectl",
+        version: KUBECTL_VERSION,
+        downloadUrl: KUBECTL_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "jq",
+        version: JQ_VERSION,
+        downloadUrl: JQ_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "node",
+        checkBinary: "npm",
+        version: NODE_VERSION,
+        downloadUrl: NODE_DOWNLOAD_URL,
+        type: "tar-xz",
+        dirFixed: `node-v${NODE_VERSION}-linux-x64`,
+        binSubPath: "bin",
+    },
+];
 
 ;// CONCATENATED MODULE: ./src/post.ts
 

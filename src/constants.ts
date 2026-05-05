@@ -1,6 +1,4 @@
-// ---------------------------------------------------------------------------
-// Solo infrastructure constants
-// ---------------------------------------------------------------------------
+import { ToolSpec } from "./types.js";
 
 /** Name of the kind cluster created by the action */
 export const CLUSTER_NAME = "solo-e2e";
@@ -30,10 +28,7 @@ export const MIRROR_NODE_REST_INTERNAL_PORT = "80";
 export const MIRROR_NODE_GRPC_INTERNAL_PORT = "5600";
 export const RELAY_INTERNAL_PORT = "7546";
 
-// ---------------------------------------------------------------------------
 // Tooling constants
-// ---------------------------------------------------------------------------
-
 export const PYTHON_VERSION = "3.12.9";
 export const PYTHON_RELEASE_TAG = "20250409";
 export const PYTHON_DOWNLOAD_URL = `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_RELEASE_TAG}/cpython-${PYTHON_VERSION}%2B${PYTHON_RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only.tar.gz`;
@@ -57,3 +52,58 @@ export const JQ_DOWNLOAD_URL = `https://github.com/jqlang/jq/releases/download/j
 
 export const NODE_VERSION = "24.0.1";
 export const NODE_DOWNLOAD_URL = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`;
+
+
+// List of system-level tools required for the Solo action.
+export const TOOLS: ToolSpec[] = [
+    {
+        name: "python",
+        checkBinary: ["python3", "python"],
+        version: PYTHON_VERSION,
+        downloadUrl: PYTHON_DOWNLOAD_URL,
+        type: "tar",
+        dirFixed: "python",
+        binSubPath: "bin",
+    },
+    {
+        name: "wget",
+        version: WGET_VERSION,
+        downloadUrl: WGET_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "java",
+        version: JAVA_VERSION,
+        downloadUrl: JAVA_DOWNLOAD_URL,
+        type: "tar",
+        dirPrefix: "jdk-",
+        binSubPath: "bin",
+    },
+    {
+        name: "kind",
+        version: KIND_VERSION,
+        downloadUrl: KIND_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "kubectl",
+        version: KUBECTL_VERSION,
+        downloadUrl: KUBECTL_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "jq",
+        version: JQ_VERSION,
+        downloadUrl: JQ_DOWNLOAD_URL,
+        type: "binary",
+    },
+    {
+        name: "node",
+        checkBinary: "npm",
+        version: NODE_VERSION,
+        downloadUrl: NODE_DOWNLOAD_URL,
+        type: "tar-xz",
+        dirFixed: `node-v${NODE_VERSION}-linux-x64`,
+        binSubPath: "bin",
+    },
+];
