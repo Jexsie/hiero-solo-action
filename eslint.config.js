@@ -32,10 +32,11 @@ export default tseslint.config(
         rules: {
             "@typescript-eslint/no-unused-vars": "error",
             "@typescript-eslint/no-explicit-any": "error",
-            "@typescript-eslint/no-unsafe-call": "off",
-            "@typescript-eslint/no-unsafe-assignment": "off",
-            "@typescript-eslint/no-unsafe-argument": "off",
-            "@typescript-eslint/no-unsafe-return": "off",
+            "@typescript-eslint/no-unsafe-call": "error",
+            "@typescript-eslint/no-unsafe-assignment": "error",
+            "@typescript-eslint/no-unsafe-argument": "error",
+            "@typescript-eslint/no-unsafe-return": "error",
+            "@typescript-eslint/no-unsafe-member-access": "error",
         },
     },
     {
